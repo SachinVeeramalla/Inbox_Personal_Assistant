@@ -1,0 +1,173 @@
+{
+  "name": "Onboarding_Page",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "onboarding",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -288,
+        -64
+      ],
+      "id": "e5b5f79a-5c87-46d0-a8e5-aa231d1dc4f5",
+      "name": "Webhook",
+      "webhookId": "ed74f8e9-0627-4e3e-8871-f925c384526d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clientId = $input.first().json.clientId;\nconst redirectUri = $input.first().json.redirectUri;\nconst tenantId = $input.first().json.tenantId;\nconst scopes = $input.first().json.scopes;\nconst state = $input.first().json.state;\nconst domainHint = $input.first().json.domainHint || 'organizations';\nconst promptType = $input.first().json.promptType || 'none';\n\n// Build base OAuth URL\nlet oauthUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?` +\n  `client_id=${encodeURIComponent(clientId)}&` +\n  `response_type=code&` +\n  `redirect_uri=${encodeURIComponent(redirectUri)}&` +\n  `response_mode=query&` +\n  `scope=${encodeURIComponent(scopes)}&` +\n  `state=${encodeURIComponent(state)}`;\n\n// Add domain_hint to skip account type selection\nif (domainHint) {\n  oauthUrl += `&domain_hint=${domainHint}`;\n}\n\n// Add prompt parameter only if not 'none'\n// 'none' = SSO (best UX), will fail gracefully if user not logged in\nif (promptType && promptType !== 'none') {\n  oauthUrl += `&prompt=${promptType}`;\n}\n\nconsole.log('✅ OAuth URL generated with prompt:', promptType);\n\nreturn {\n  json: {\n    oauthUrl: oauthUrl,\n    promptType: promptType,\n    domainHint: domainHint\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -64
+      ],
+      "id": "fe709ad6-2364-4ea2-a4e3-01e2a06953a9",
+      "name": "Generate_OAuth_URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\n// Access input from previous node\nconst inputData = $input.first().json;\n\n// Generate secure CSRF token (32 bytes = 256 bits)\nconst csrfToken = crypto.randomBytes(32).toString('base64url');\n\n// Generate unique session ID\nconst sessionId = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;\n\n// Create state object with additional security metadata\nconst stateData = {\n    csrf: csrfToken,\n    timestamp: String(Math.floor(Date.now() / 1000)),\n    sessionId: sessionId,\n    nonce: crypto.randomBytes(16).toString('base64url')\n};\n\n// Encode state as base64url JSON\nconst stateJson = JSON.stringify(stateData);\nconst stateEncoded = Buffer.from(stateJson).toString('base64url');\n\nconsole.log(`✅ Generated sessionId: ${sessionId}`);\nconsole.log(`✅ CSRF token: ${csrfToken.substring(0, 10)}...`);\nconsole.log(`✅ State encoded: ${stateEncoded.substring(0, 20)}...`);\n\n// Return all config fields + encoded state\nreturn [{\n    json: {\n        clientId: inputData.clientId,\n        redirectUri: inputData.redirectUri,\n        tenantId: inputData.tenantId,\n        scopes: inputData.scopes,\n        state: stateEncoded,\n        sessionId: sessionId,\n        csrfToken: csrfToken,\n        domainHint: inputData.domainHint || 'organizations',\n        promptType: inputData.promptType || 'none'\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -64
+      ],
+      "id": "3f7fb2e8-492e-4403-b692-5b8080fd4096",
+      "name": "Generate_State"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f8f716fb-b525-4c16-97a5-2098e1604599",
+              "name": "clientId",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Id }}",
+              "type": "string"
+            },
+            {
+              "id": "86607cef-e8b9-48cc-8c28-ae3588efa8d4",
+              "name": "redirectUri",
+              "value": "={{ $vars.Inbox_Assistant_Prod_Redirect_URI }}",
+              "type": "string"
+            },
+            {
+              "id": "cc341a63-2d35-4925-a436-260e3c188277",
+              "name": "tenantId",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Tenant_Id }}",
+              "type": "string"
+            },
+            {
+              "id": "529ad27c-d56c-44f7-b408-4031f0372129",
+              "name": "scopes",
+              "value": "openid profile email User.Read Calendars.ReadWrite offline_access Calendars.ReadWrite.Shared User.ReadBasic.All",
+              "type": "string"
+            },
+            {
+              "id": "domain-hint-config",
+              "name": "domainHint",
+              "value": "organizations",
+              "type": "string"
+            },
+            {
+              "id": "prompt-type-config",
+              "name": "promptType",
+              "value": "={{ $json.query.prompt || 'none' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -80,
+        -64
+      ],
+      "id": "b36a5bcb-e31b-4107-a352-9e777def9c45",
+      "name": "Configurations"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>Connect Your Outlook - Groovie</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    * {\n      margin: 0;\n      padding: 0;\n      box-sizing: border-box;\n    }\n    body {\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      padding: 20px;\n      position: relative;\n      overflow: hidden;\n    }\n    body::before {\n      content: '';\n      position: absolute;\n      width: 400px;\n      height: 400px;\n      background: rgba(243, 156, 18, 0.1);\n      border-radius: 50%;\n      top: -150px;\n      right: -150px;\n    }\n    body::after {\n      content: '';\n      position: absolute;\n      width: 300px;\n      height: 300px;\n      background: rgba(243, 156, 18, 0.1);\n      border-radius: 50%;\n      bottom: -100px;\n      left: -100px;\n    }\n    .container {\n      background: white;\n      padding: 50px 40px;\n      border-radius: 20px;\n      box-shadow: 0 20px 60px rgba(0,0,0,0.3);\n      text-align: center;\n      max-width: 480px;\n      width: 100%;\n      position: relative;\n      z-index: 1;\n      animation: fadeIn 0.5s ease-out;\n    }\n    @keyframes fadeIn {\n      from {\n        opacity: 0;\n        transform: translateY(20px);\n      }\n      to {\n        opacity: 1;\n        transform: translateY(0);\n      }\n    }\n    .logo {\n      width: 120px;\n      height: 120px;\n      margin: 0 auto 20px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n    }\n    .logo img {\n      width: 100%;\n      height: 100%;\n      object-fit: contain;\n      filter: drop-shadow(0 5px 15px rgba(0,0,0,0.2));\n    }\n    h1 {\n      color: #2C5F5F;\n      margin-bottom: 15px;\n      font-size: 28px;\n      font-weight: 700;\n    }\n    .subtitle {\n      color: #666;\n      line-height: 1.6;\n      margin-bottom: 30px;\n      font-size: 16px;\n    }\n    .features {\n      text-align: left;\n      margin: 30px 0;\n      background: linear-gradient(135deg, #e8f4f8 0%, #f0f9fc 100%);\n      padding: 20px;\n      border-radius: 12px;\n      border-left: 4px solid #F39C12;\n    }\n    .features-title {\n      font-weight: 600;\n      color: #2C5F5F;\n      margin-bottom: 15px;\n      font-size: 14px;\n      text-transform: uppercase;\n      letter-spacing: 0.5px;\n    }\n    .features ul {\n      list-style: none;\n    }\n    .features li {\n      margin: 12px 0;\n      color: #555;\n      padding-left: 30px;\n      position: relative;\n      line-height: 1.5;\n    }\n    .features li:before {\n      content: \"✓\";\n      position: absolute;\n      left: 0;\n      color: #F39C12;\n      font-weight: bold;\n      font-size: 18px;\n    }\n    .btn {\n      display: inline-block;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      color: white;\n      padding: 16px 48px;\n      text-decoration: none;\n      border-radius: 12px;\n      font-size: 16px;\n      font-weight: 600;\n      transition: all 0.3s;\n      border: none;\n      cursor: pointer;\n      margin-top: 10px;\n      box-shadow: 0 5px 20px rgba(44, 95, 95, 0.3);\n    }\n    .btn:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(44, 95, 95, 0.4);\n    }\n    .privacy {\n      font-size: 13px;\n      color: #999;\n      margin-top: 30px;\n      line-height: 1.5;\n    }\n    .privacy strong {\n      color: #666;\n    }\n    .brand-name {\n      color: #F39C12;\n      font-weight: 700;\n      font-size: 18px;\n      margin-bottom: 5px;\n    }\n    @media (max-width: 480px) {\n      .container {\n        padding: 40px 30px;\n      }\n      h1 {\n        font-size: 24px;\n      }\n      .logo {\n        width: 100px;\n        height: 100px;\n      }\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"logo\">\n      <img src=\"\"C:\\Users\\Sachin\\OneDrive - Groves & Company LLC\\Gemini_Generated_Image_o9yk6no9yk6no9yk.png\"\" alt=\"Groovie\" id=\"logoImg\">\n    </div>\n    <div class=\"brand-name\">Groovie</div>\n    <h1>Email Personal Assistant</h1>\n    <p class=\"subtitle\">Connect your Outlook to enable AI-powered email management</p>\n    \n    <div class=\"features\">\n      <div class=\"features-title\">What you'll get</div>\n      <ul>\n        <li><strong>Daily email summaries</strong> delivered to Teams every morning</li>\n        <li><strong>Auto-categorization</strong> of all incoming emails</li>\n        <li><strong>AI-powered drafts</strong> written in your personal style</li>\n        <li><strong>Smart scheduling</strong> based on your availability</li>\n        <li><strong>Focus time blocks</strong> automatically created</li>\n      </ul>\n    </div>\n    \n    <a href=\"{{ $json.oauthUrl }}\" class=\"btn\">\n      Connect Outlook Account\n    </a>\n    \n    <div class=\"privacy\">\n      <strong>🔒 Your Privacy Matters</strong><br>\n      Your emails and calendar data remain private and secure. Only you can access your information. You can disconnect at any time.\n      <p style=\"margin-top: 15px; font-size: 12px;\">© 2025 Groves & Company. All rights reserved.</p>\n    </div>\n  </div>\n\n  <script>\n    // Load the actual Groovie logo image\n    fetch('/path/to/groovie-logo.png')\n      .then(response => response.blob())\n      .then(blob => {\n        const url = URL.createObjectURL(blob);\n        document.getElementById('logoImg').src = url;\n      })\n      .catch(() => {\n        // Fallback to emoji if image fails to load\n        document.querySelector('.logo').innerHTML = '<div style=\"font-size: 64px;\">📧</div>';\n      });\n\n    window.addEventListener('load', function() {\n      document.querySelector('.container').style.animation = 'fadeIn 0.5s ease-out';\n    });\n  </script>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        544,
+        -64
+      ],
+      "id": "8ea30ee1-f644-42af-a2a0-8f6200b14329",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Generate_State": {
+      "main": [
+        [
+          {
+            "node": "Generate_OAuth_URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configurations": {
+      "main": [
+        [
+          {
+            "node": "Generate_State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Configurations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate_OAuth_URL": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "54904552-44b7-4174-952e-c253b7997278",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "arLYaxKjGn8zdxVX",
+  "tags": []
+}

@@ -1,0 +1,85 @@
+{
+  "name": "Select_Preference",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Extract query parameters from the incoming request\nconst query = $input.first().json.query || {};\n\nconsole.log('Query parameters:', query);\n\n// Validate required parameters\nif (!query.userId || !query.userEmail) {\n  throw new Error('Missing required parameters: userId and userEmail');\n}\n\nreturn [{\n  json: {\n    userId: query.userId,\n    userEmail: query.userEmail,\n    userName: query.userName || 'User'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        128
+      ],
+      "id": "e11ae8be-8ad6-40d3-a1cf-bdec86f73afa",
+      "name": "Extract_Query_Params"
+    },
+    {
+      "parameters": {
+        "path": "preference",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        944,
+        128
+      ],
+      "id": "f462c252-7a9b-4019-939e-d13c3867efd4",
+      "name": "Webhook1",
+      "webhookId": "b853c31e-254a-4d0c-b47d-4eddc60c9f58"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>Customize Your Email Summary - Groovie</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    * {\n      margin: 0;\n      padding: 0;\n      box-sizing: border-box;\n    }\n    body {\n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      min-height: 100vh;\n      padding: 40px 20px;\n    }\n    .container {\n      max-width: 900px;\n      margin: 0 auto;\n      background: white;\n      border-radius: 20px;\n      box-shadow: 0 20px 60px rgba(0,0,0,0.3);\n      overflow: hidden;\n    }\n    .header {\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      color: white;\n      padding: 40px;\n      text-align: center;\n    }\n    .header h1 {\n      font-size: 28px;\n      margin-bottom: 10px;\n    }\n    .header p {\n      opacity: 0.9;\n      font-size: 16px;\n    }\n    .content {\n      padding: 40px;\n    }\n    .welcome {\n      text-align: center;\n      margin-bottom: 40px;\n    }\n    .welcome h2 {\n      color: #2C5F5F;\n      margin-bottom: 10px;\n    }\n    .welcome p {\n      color: #666;\n      font-size: 15px;\n    }\n    .options {\n      display: grid;\n      gap: 25px;\n      margin-bottom: 40px;\n    }\n    .option-card {\n      border: 3px solid #e0e0e0;\n      border-radius: 16px;\n      padding: 25px;\n      cursor: pointer;\n      transition: all 0.3s;\n      position: relative;\n      background: white;\n    }\n    .option-card:hover {\n      border-color: #F39C12;\n      box-shadow: 0 5px 20px rgba(243, 156, 18, 0.2);\n      transform: translateY(-2px);\n    }\n    .option-card.selected {\n      border-color: #F39C12;\n      background: linear-gradient(135deg, #fff9f0 0%, #ffffff 100%);\n      box-shadow: 0 5px 20px rgba(243, 156, 18, 0.3);\n    }\n    .option-card input[type=\"radio\"] {\n      position: absolute;\n      opacity: 0;\n      width: 0;\n      height: 0;\n    }\n    .option-header {\n      display: flex;\n      align-items: center;\n      margin-bottom: 15px;\n    }\n    .radio-custom {\n      width: 24px;\n      height: 24px;\n      border: 2px solid #ccc;\n      border-radius: 50%;\n      margin-right: 15px;\n      display: flex;\n      align-items: center;\n      justify-content: center;\n      flex-shrink: 0;\n      transition: all 0.3s;\n      position: relative;\n    }\n    .option-card.selected .radio-custom {\n      border-color: #F39C12;\n      background: #F39C12;\n    }\n    .radio-custom::after {\n      content: '';\n      width: 10px;\n      height: 10px;\n      border-radius: 50%;\n      background: white;\n      opacity: 0;\n      transition: opacity 0.3s;\n    }\n    .option-card.selected .radio-custom::after {\n      opacity: 1;\n    }\n    .option-title {\n      font-size: 18px;\n      font-weight: 600;\n      color: #2C5F5F;\n      flex: 1;\n    }\n    .badge {\n      display: inline-block;\n      background: #F39C12;\n      color: white;\n      padding: 4px 12px;\n      border-radius: 12px;\n      font-size: 11px;\n      font-weight: 600;\n      text-transform: uppercase;\n      letter-spacing: 0.5px;\n    }\n    .option-description {\n      color: #666;\n      line-height: 1.6;\n      margin-bottom: 15px;\n    }\n    .preview {\n      background: #f8f9fa;\n      border-radius: 12px;\n      padding: 20px;\n      border-left: 4px solid #F39C12;\n    }\n    .preview-title {\n      font-size: 13px;\n      font-weight: 600;\n      color: #2C5F5F;\n      margin-bottom: 12px;\n      text-transform: uppercase;\n      letter-spacing: 0.5px;\n    }\n    .preview-content {\n      font-size: 14px;\n      color: #555;\n      line-height: 1.8;\n    }\n    .preview-item {\n      margin: 8px 0;\n      padding-left: 20px;\n      position: relative;\n    }\n    .preview-item::before {\n      content: '•';\n      position: absolute;\n      left: 0;\n      color: #F39C12;\n      font-weight: bold;\n    }\n    .action-section {\n      text-align: center;\n      padding-top: 20px;\n      border-top: 2px solid #f0f0f0;\n    }\n    .btn {\n      display: inline-block;\n      background: linear-gradient(135deg, #F39C12 0%, #e67e22 100%);\n      color: white;\n      padding: 16px 48px;\n      border: none;\n      border-radius: 12px;\n      font-size: 16px;\n      font-weight: 600;\n      cursor: pointer;\n      transition: all 0.3s;\n      box-shadow: 0 5px 20px rgba(243, 156, 18, 0.3);\n    }\n    .btn:hover:not(:disabled) {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);\n    }\n    .btn:disabled {\n      background: #ccc;\n      cursor: not-allowed;\n      transform: none;\n      box-shadow: none;\n    }\n    .error-message {\n      display: none;\n      background: #fee;\n      border: 1px solid #fcc;\n      color: #c33;\n      padding: 15px;\n      border-radius: 8px;\n      margin-bottom: 20px;\n      text-align: center;\n    }\n    .success-overlay {\n      display: none;\n      position: fixed;\n      top: 0;\n      left: 0;\n      width: 100%;\n      height: 100%;\n      background: rgba(0,0,0,0.8);\n      z-index: 1000;\n      align-items: center;\n      justify-content: center;\n    }\n    .success-content {\n      background: white;\n      padding: 50px;\n      border-radius: 20px;\n      text-align: center;\n      max-width: 400px;\n      animation: scaleIn 0.3s ease-out;\n    }\n    @keyframes scaleIn {\n      from {\n        transform: scale(0.8);\n        opacity: 0;\n      }\n      to {\n        transform: scale(1);\n        opacity: 1;\n      }\n    }\n    .success-content h2 {\n      color: #2C5F5F;\n      margin: 20px 0 10px;\n    }\n    .loading-dots {\n      display: inline-block;\n    }\n    .loading-dots span {\n      animation: blink 1.4s infinite;\n      animation-fill-mode: both;\n    }\n    .loading-dots span:nth-child(2) {\n      animation-delay: 0.2s;\n    }\n    .loading-dots span:nth-child(3) {\n      animation-delay: 0.4s;\n    }\n    @keyframes blink {\n      0%, 80%, 100% {\n        opacity: 0;\n      }\n      40% {\n        opacity: 1;\n      }\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>🎯 Customize Your Daily Summary</h1>\n      <p>Choose how you want to receive your email summaries</p>\n    </div>\n    \n    <div class=\"content\">\n      <div class=\"welcome\">\n        <h2>Welcome,{{ $json.userName }} ! 👋</h2>\n        <p>Let's personalize your experience. Select your preferred summary format below.</p>\n      </div>\n\n      <div id=\"errorMessage\" class=\"error-message\"></div>\n\n      <form id=\"preferencesForm\">\n        <div class=\"options\">\n          <!-- Option 1: Action-First Format -->\n          <div class=\"option-card\" data-preference=\"action_first\" onclick=\"selectOption(this)\">\n            <input type=\"radio\" name=\"summary_type\" value=\"action_first\" id=\"action_first\">\n            <div class=\"option-header\">\n              <div class=\"radio-custom\"></div>\n              <div class=\"option-title\">Action-First Summary</div>\n              <span class=\"badge\">Recommended</span>\n            </div>\n            <div class=\"option-description\">\n              Get all your action items at the top, organized by priority. Perfect for starting your day with clear next steps.\n            </div>\n            <div class=\"preview\">\n              <div class=\"preview-title\">📋 Preview Format</div>\n              <div class=\"preview-content\">\n                <strong style=\"color: #2C5F5F; display: block; margin-bottom: 8px;\">Action Items (3):</strong>\n                <div class=\"preview-item\">Evaluate Phillips Precision's CNC services <span style=\"font-size:12px;color:#999;\">(from: The Bridge to Quantum)</span></div>\n                <div class=\"preview-item\">Review Q4 budget proposal <span style=\"font-size:12px;color:#999;\">(from: Finance Team)</span></div>\n                <div class=\"preview-item\">Approve design mockups <span style=\"font-size:12px;color:#999;\">(from: Sarah Johnson)</span></div>\n                <strong style=\"color: #2C5F5F; display: block; margin: 15px 0 8px;\">All Emails (5):</strong>\n                <div class=\"preview-item\">The Bridge to Quantum - Request (MEDIUM)</div>\n                <div class=\"preview-item\">Q4 Budget Review - Action Required (HIGH)</div>\n              </div>\n            </div>\n          </div>\n\n          <!-- Option 2: Standard Format -->\n          <div class=\"option-card\" data-preference=\"standard\" onclick=\"selectOption(this)\">\n            <input type=\"radio\" name=\"summary_type\" value=\"standard\" id=\"standard\">\n            <div class=\"option-header\">\n              <div class=\"radio-custom\"></div>\n              <div class=\"option-title\">Standard Summary</div>\n            </div>\n            <div class=\"option-description\">\n              View all emails with their summaries and inline action items. Great for a comprehensive overview.\n            </div>\n            <div class=\"preview\">\n              <div class=\"preview-title\">📧 Preview Format</div>\n              <div class=\"preview-content\">\n                <strong style=\"color: #2C5F5F; display: block; margin-bottom: 8px;\">The Bridge to Quantum <span style=\"background:#ffc107;color:#000;padding:2px 8px;border-radius:4px;font-size:11px;margin-left:8px;\">MEDIUM</span></strong>\n                <div style=\"font-size:13px;color:#666;margin-bottom:8px;\">From: Jonathan | Type: Request | Read Time: 30 seconds</div>\n                <div style=\"margin-bottom:8px;\">Phillips Precision follows up to explore CNC machining services...</div>\n                <div style=\"background:#fff3cd;padding:10px;border-radius:6px;font-size:13px;\">\n                  <strong>📋 Action Items (2):</strong><br>\n                  • Evaluate if services fit current needs<br>\n                  • Forward to appropriate person if not right contact\n                </div>\n              </div>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"action-section\">\n          <button type=\"submit\" class=\"btn\" id=\"submitBtn\">\n            Save Preferences & Continue\n          </button>\n        </div>\n      </form>\n    </div>\n  </div>\n\n  <div class=\"success-overlay\" id=\"successOverlay\">\n    <div class=\"success-content\">\n      <div style=\"font-size: 64px;\">✅</div>\n      <h2>All Set!</h2>\n      <p style=\"color: #666; margin-bottom: 20px;\">Your preferences have been saved successfully.</p>\n      <p style=\"font-size: 14px; color: #999;\">\n        Redirecting<span class=\"loading-dots\"><span>.</span><span>.</span><span>.</span></span>\n      </p>\n    </div>\n  </div>\n\n  <script>\n    const userData = {\n  userId: '{{ $json.userId }}',\n  userEmail: '{{ $json.userEmail }}',\n  userName: '{{ $json.userName }}'\n};\n\n    console.log('User data loaded:', userData);\n\n    // Function to select an option\n    function selectOption(card) {\n      // Remove selected class from all cards\n      document.querySelectorAll('.option-card').forEach(c => {\n        c.classList.remove('selected');\n      });\n      \n      // Add selected class to clicked card\n      card.classList.add('selected');\n      \n      // Check the radio button\n      const radio = card.querySelector('input[type=\"radio\"]');\n      radio.checked = true;\n      \n      console.log('Selected preference:', radio.value);\n    }\n\n    // Handle form submission\n    document.getElementById('preferencesForm').addEventListener('submit', async function(e) {\n      e.preventDefault();\n      \n      const selectedPreference = document.querySelector('input[name=\"summary_type\"]:checked');\n      \n      if (!selectedPreference) {\n        showError('Please select a summary format');\n        return;\n      }\n    \n      const submitBtn = document.getElementById('submitBtn');\n      const originalText = submitBtn.textContent;\n      submitBtn.innerHTML = 'Saving<span class=\"loading-dots\"><span>.</span><span>.</span><span>.</span></span>';\n      submitBtn.disabled = true;\n    \n      console.log('Submitting preference:', selectedPreference.value);\n    \n      try {\n        const baseUrl = window.location.origin;\n        const saveUrl = `${baseUrl}/webhook/save-preferences`;\n        \n        console.log('Posting to:', saveUrl);\n    \n        const response = await fetch(saveUrl, {\n          method: 'POST',\n          headers: {\n            'Content-Type': 'application/json',\n          },\n          body: JSON.stringify({\n            userId: userData.userId,\n            userEmail: userData.userEmail,\n            userName: userData.userName,  // ✅ Include userName\n            summaryPreference: selectedPreference.value\n          })\n        });\n    \n        console.log('Response status:', response.status);\n    \n        if (!response.ok) {\n          const errorText = await response.text();\n          console.error('Error response:', errorText);\n          throw new Error('Failed to save preferences: ' + response.status);\n        }\n    \n        // ✅ CHANGED: Display HTML response instead of parsing JSON\n        const successHtml = await response.text();\n        document.open();\n        document.write(successHtml);\n        document.close();\n    \n      } catch (error) {\n        console.error('Error saving preferences:', error);\n        showError('Failed to save preferences. Please try again. Error: ' + error.message);\n        submitBtn.textContent = originalText;\n        submitBtn.disabled = false;\n      }\n    });\n\n    function showError(message) {\n      const errorDiv = document.getElementById('errorMessage');\n      errorDiv.textContent = message;\n      errorDiv.style.display = 'block';\n      \n      // Scroll to error\n      errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });\n      \n      setTimeout(() => {\n        errorDiv.style.display = 'none';\n      }, 5000);\n    }\n\n    // Prevent accidental form submission on Enter key\n    document.addEventListener('keypress', function(e) {\n      if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {\n        e.preventDefault();\n      }\n    });\n  </script>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1392,
+        128
+      ],
+      "id": "70bc4b89-f699-4f50-8d4a-a6632cc5f1b0",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract_Query_Params": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Extract_Query_Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "3fe308ce-54ca-4c9e-b474-03e92bd18a00",
+  "meta": {
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "n7qt-YomaWD5oWo17yPci",
+  "tags": []
+}

@@ -1,0 +1,2120 @@
+{
+  "name": "Subscription Renewal Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "daysInterval": 2,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2912,
+        9344
+      ],
+      "name": "Schedule_Daily_6AM",
+      "id": "a9c336bd-c88e-4778-929a-f4fe4247fcec",
+      "notes": "Runs daily at 6:00 AM - optimal renewal window"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: \"Filter_Valid_Users\"\n\n// Filter active users with valid subscriptions\nconst allUsers = $input.all();\nconst now = Date.now();\n\nconst validUsers = allUsers.filter(item => {\n  const user = item.json;\n  \n  // Must be active\n  if (!user.is_active) return false;\n  \n  // Must have subscription ID\n  if (!user.subscription_id) return false;\n  \n  // Must have access token\n  if (!user.access_token) return false;\n  \n  // Must have subscription expiry date\n  if (!user.subscription_expires_at) return false;\n  \n  return true;\n});\n\nif (validUsers.length === 0) {\n  console.log('No users to process - stopping workflow');\n  return [];\n}\n\nreturn validUsers;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2512,
+        9344
+      ],
+      "name": "Filter_Valid_Users",
+      "id": "c7ad63f8-4f80-44a8-bddc-973e75cc4579"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2320,
+        9344
+      ],
+      "name": "Process_Users_One_By_One",
+      "id": "d4d24751-814f-4494-952f-56c7461f21a9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════════════════════════\n// COMPREHENSIVE TOKEN & SUBSCRIPTION EXPIRY CHECK\n// ═══════════════════════════════════════════════════════════\n\nconst user = $input.item.json;\nconst now = Date.now();\n\nconsole.log(`\\n┌─────────────────────────────────────────┐`);\nconsole.log(`│ Processing: ${user.user_email.padEnd(28)} │`);\nconsole.log(`└─────────────────────────────────────────┘`);\n\n// ═══════════════════════════════════════\n// 1. TOKEN EXPIRY CHECK\n// ═══════════════════════════════════════\nlet needsTokenRefresh = false;\nlet tokenStatus = 'unknown';\n\nif (!user.token_expires_at_unix) {\n  needsTokenRefresh = true;\n  tokenStatus = 'missing_expiry';\n} else {\n  // FIX: Don't multiply by 1000 if already in milliseconds\n  let tokenExpiresAt = parseInt(user.token_expires_at_unix);\n  \n  // Check if value is in seconds (< year 2100 in seconds)\n  if (tokenExpiresAt < 4102444800) {\n    tokenExpiresAt = tokenExpiresAt * 1000;\n  }\n  \n  const tokenExpiresIn = tokenExpiresAt - now;\n  const tokenHoursRemaining = tokenExpiresIn / (1000 * 60 * 60);\n  \n  // Refresh if expires in < 5 minutes\n  const fiveMinutes = 5 * 60 * 1000;\n  needsTokenRefresh = tokenExpiresIn < fiveMinutes;\n  \n  tokenStatus = needsTokenRefresh ? 'needs_refresh' : 'valid';\n  \n  console.log(`Token: ${tokenStatus}`);\n  console.log(`Expires: ${new Date(tokenExpiresAt).toISOString()}`);\n  console.log(`Time remaining: ${tokenHoursRemaining.toFixed(1)}h`);\n}\n\n// ═══════════════════════════════════════\n// 2. SUBSCRIPTION EXPIRY CHECK\n// ═══════════════════════════════════════\nlet subscriptionStatus = 'unknown';\nlet renewalAction = 'skip';\nlet hoursUntilExpiration = 0;\n\nif (!user.subscription_expires_at) {\n  subscriptionStatus = 'missing_expiry';\n  renewalAction = 'skip';\n} else {\n  const subExpiresAt = new Date(user.subscription_expires_at).getTime();\n  const timeUntilExpiration = subExpiresAt - now;\n  hoursUntilExpiration = timeUntilExpiration / (1000 * 60 * 60);\n  \n  // ═══════════════════════════════════════\n  // DECISION MATRIX (FIXED)\n  // ═══════════════════════════════════════\n  \n  if (hoursUntilExpiration <= 0) {\n    // EXPIRED - Must recreate\n    subscriptionStatus = 'expired';\n    renewalAction = 'recreate';\n    \n  } else if (hoursUntilExpiration < 24) {\n    // DANGER ZONE (<24h) - Microsoft blocks renewal\n    subscriptionStatus = 'danger_zone';\n    renewalAction = 'recreate';\n    \n  } else if (hoursUntilExpiration >= 24 && hoursUntilExpiration <= 60) {\n    // OPTIMAL RENEWAL WINDOW (24-60h)\n    subscriptionStatus = 'renewal_window';\n    renewalAction = 'renew';\n    console.log(`Subscription: RENEWAL WINDOW - safe to renew`);\n    \n  } else {\n    // TOO EARLY (>60h)\n    subscriptionStatus = 'valid';\n    renewalAction = 'skip';\n    console.log(`Subscription: Still valid - no action needed`);\n  }\n  \n  console.log(`Subscription status: ${subscriptionStatus}`);\n  console.log(`Expires: ${new Date(subExpiresAt).toISOString()}`);\n  console.log(`Time remaining: ${hoursUntilExpiration.toFixed(1)}h`);\n  console.log(`Action: ${renewalAction.toUpperCase()}`);\n}\n\nreturn {\n  json: {\n    ...user,\n    // Token info\n    needs_token_refresh: needsTokenRefresh,\n    token_status: tokenStatus,\n    \n    // Subscription info\n    subscription_status: subscriptionStatus,\n    renewal_action: renewalAction,\n    hours_until_expiration: hoursUntilExpiration.toFixed(1),\n    \n    // Metadata\n    checked_at: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2048,
+        9696
+      ],
+      "name": "Analyze_User_Status",
+      "id": "66931568-fb7c-467b-a53e-ba8263150c71"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "12baf7b9-382f-4ae5-a2ee-f0fc9ea63afc",
+              "leftValue": "={{ $json.needs_token_refresh }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1728,
+        9696
+      ],
+      "name": "IF_Token_Needs_Refresh",
+      "id": "79697b88-7e81-4b51-8434-c3b9fb0c37bb"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $vars.Inbox_Assistant_Microsoft_Tenant_Id}}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Id }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Secret }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "scope",
+              "value": "openid profile email User.Read MailboxSettings.Read Calendars.ReadWrite Mail.ReadWrite offline_access"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.refresh_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1488,
+        9280
+      ],
+      "name": "Refresh_Access_Token",
+      "id": "ee6e3652-5f93-42d2-a465-e158232dab93",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.access_token }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        9280
+      ],
+      "name": "IF_Token_Refresh_Success",
+      "id": "a9acd942-3be9-49e2-a284-568f502d3967"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $('Analyze_User_Status').item.json.user_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "access_token": "={{ $json.access_token }}",
+            "refresh_token": "={{ $json.refresh_token || $('Analyze_User_Status').item.json.refresh_token }}",
+            "token_expires_at": "={{ new Date(Date.now() + ($json.expires_in * 1000)).toISOString() }}",
+            "token_expires_at_unix": "={{ Math.floor(Date.now() / 1000) + $json.expires_in }}",
+            "last_refreshed": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "outlook_credential_id",
+              "displayName": "outlook_credential_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        9072
+      ],
+      "name": "Update_Token_In_DB",
+      "id": "4e8829b2-46ef-4a8b-9f4c-ab5a2d20d910",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalUser = $('Analyze_User_Status').item.json;\nconst tokenResponse = $input.item.json;\n\nconsole.log(`✅ Token refreshed successfully`);\n\nreturn {\n  json: {\n    ...originalUser,\n    access_token: tokenResponse.access_token,\n    refresh_token: tokenResponse.refresh_token || originalUser.refresh_token,\n    token_refreshed: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        9072
+      ],
+      "name": "Merge_New_Token",
+      "id": "02cac21d-728f-44c2-b5b2-a5861245e63a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalUser = $('Analyze_User_Status').item.json;\n\nconsole.error(`❌ Token refresh FAILED - user will be deactivated`);\n\nreturn {\n  json: {\n    ...originalUser,\n    token_refresh_failed: true,\n    should_deactivate: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        9424
+      ],
+      "name": "Handle_Token_Failure",
+      "id": "6efb6543-c8cc-420a-9656-a6a706c2d56a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "916c277a-34a5-48ad-9f26-bc4576669351",
+              "leftValue": "={{ $json.renewal_action }}",
+              "rightValue": "skip",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        320,
+        9696
+      ],
+      "name": "IF_Should_Skip",
+      "id": "e3796f09-16ba-47f8-bb8b-0a2b25caf59a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const user = $input.item.json;\n\nconsole.log(`⏭️ SKIP - No renewal needed`);\nconsole.log(`   Subscription valid for ${user.hours_until_expiration}h\\n`);\n\nreturn {\n  json: {\n    user_email: user.user_email,\n    action: 'skipped',\n    reason: `Subscription valid for ${user.hours_until_expiration}h`,\n    success: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        8704
+      ],
+      "name": "Log_Skip",
+      "id": "7fb90a98-18bb-44f6-a803-fc9e444b0127"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "b3e5d6ec-b86d-44bb-b489-6dc5451c9f4c",
+              "leftValue": "={{ $json.renewal_action }}",
+              "rightValue": "renew",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        9872
+      ],
+      "name": "IF_Can_Renew",
+      "id": "12e1efb1-df49-4f0c-b2cf-c053cff2b3dc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const user = $input.item.json;\n\n// Calculate new expiration (3 days from now)\nconst newExpiration = new Date(Date.now() + (3 * 24 * 60 * 60 * 1000)).toISOString();\n\nconsole.log(`🔄 Attempting RENEW via PATCH`);\nconsole.log(`   Current expiry: ${user.subscription_expires_at}`);\nconsole.log(`   New expiry: ${newExpiration}`);\n\nreturn {\n  json: {\n    ...user,\n    new_expiration: newExpiration\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        9632
+      ],
+      "name": "Prepare_Renewal",
+      "id": "7c3d50fd-94dc-471f-b5ba-5c8137df0fc7"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://graph.microsoft.com/v1.0/subscriptions/{{ $json.subscription_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"expirationDateTime\": \"{{ $json.new_expiration }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1024,
+        9632
+      ],
+      "name": "PATCH_Renew_Subscription",
+      "id": "f113dde3-f200-4315-94d2-eebb63c2380f",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1c8ae284-d8db-4cb4-8a48-80e7002af4f4",
+              "leftValue": "={{ $json.expirationDateTime }}",
+              "rightValue": "",
+              "operator": {
+                "type": "dateTime",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        9632
+      ],
+      "name": "IF_Renewal_Success",
+      "id": "0ec9ce65-e704-4a3a-ac35-99a878a0cf57"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $('Prepare_Renewal').item.json.user_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "subscription_expires_at": "={{ $json.expirationDateTime }}",
+            "last_subscription_renewal": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "outlook_credential_id",
+              "displayName": "outlook_credential_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1552,
+        9408
+      ],
+      "name": "Update_Renewed_Subscription",
+      "id": "efed6d01-3067-45aa-8f4d-7651fd39e2cb",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalUser = $('Prepare_Renewal').item.json;\nconst renewalResponse = $input.item.json;\n\nconsole.log(`✅ RENEW SUCCESS via PATCH`);\nconsole.log(`   New expiry: ${renewalResponse.expirationDateTime}\\n`);\n\nreturn {\n  json: {\n    user_email: originalUser.user_email,\n    action: 'renewed',\n    method: 'patch',\n    new_expiration: renewalResponse.expirationDateTime,\n    success: true\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        9408
+      ],
+      "name": "Log_Renewal_Success",
+      "id": "94487e30-83af-42e7-916d-933a135ce5c4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalUser = $('Prepare_Renewal').item.json;\nconst error = $input.item.json.error || $input.item.json;\n\nif (error.message) {\n  console.warn(`   Error: ${error.message}`);\n}\n\nreturn {\n  json: {\n    ...originalUser,\n    renewal_failed: true,\n    renewal_action: 'recreate' // Force recreation\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        9712
+      ],
+      "name": "Handle_Renewal_Failure",
+      "id": "9fbf5c92-640e-4e57-bbd9-9d233b2d3f70"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        5216,
+        8640
+      ],
+      "name": "Merge_All_Results",
+      "id": "97186d37-fa64-4053-8e1d-ac1a5723e5ec"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Track result for this user\nconst result = $input.item.json;\n\nreturn {\n  json: {\n    user_email: result.user_email,\n    action: result.action,\n    success: result.success,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5696,
+        10400
+      ],
+      "name": "Track_User_Result",
+      "id": "7db84b0b-2349-45f3-970a-7a9940df2020"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final summary after all users processed\nconst allResults = $input.all();\n\nconst total = allResults.length;\nconst successful = allResults.filter(r => r.json.success).length;\nconst failed = allResults.filter(r => !r.json.success).length;\nconst skipped = allResults.filter(r => r.json.action === 'skipped').length;\nconst renewed = allResults.filter(r => r.json.action === 'renewed').length;\nconst recreated = allResults.filter(r => r.json.action === 'recreated').length;\n\nconsole.log(`\\n╔════════════════════════════════════════════╗`);\nconsole.log(`║  SUBSCRIPTION RENEWAL COMPLETE             ║`);\nconsole.log(`╠════════════════════════════════════════════╣`);\nconsole.log(`║  Total Processed:      ${String(total).padStart(15)}   ║`);\nconsole.log(`║  ────────────────────────────────────────  ║`);\nconsole.log(`║  ✅ Successful:         ${String(successful).padStart(15)}   ║`);\nconsole.log(`║  ❌ Failed:             ${String(failed).padStart(15)}   ║`);\nconsole.log(`║  ────────────────────────────────────────  ║`);\nconsole.log(`║  ⏭️  Skipped (valid):   ${String(skipped).padStart(15)}   ║`);\nconsole.log(`║  🔄 Renewed (PATCH):    ${String(renewed).padStart(15)}   ║`);\nconsole.log(`║  🔄 Recreated (DEL+CR): ${String(recreated).padStart(15)}   ║`);\nconsole.log(`╚════════════════════════════════════════════╝\\n`);\n\nif (failed > 0) {\n  console.error(`⚠️ ${failed} user(s) failed - check logs above for details\\n`);\n}\n\nreturn {\n  json: {\n    summary: {\n      total_processed: total,\n      successful: successful,\n      failed: failed,\n      skipped: skipped,\n      renewed: renewed,\n      recreated: recreated\n    },\n    details: allResults.map(r => r.json),\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        8976
+      ],
+      "name": "Generate_Final_Summary",
+      "id": "ac8ae370-84de-480f-8fa7-49a7d97aa8c9"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -2720,
+        9344
+      ],
+      "name": "Get_All_Active_Users2",
+      "id": "7235544e-ef55-4b25-959f-2f561fa81fac"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $json.user_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_active": false,
+            "last_failure_reason": "Token refresh failed",
+            "last_failure_timestamp": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "outlook_credential_id",
+              "displayName": "outlook_credential_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -672,
+        9424
+      ],
+      "name": "Deactivate_User",
+      "id": "6a825a64-a4a2-462b-be41-506459a70847",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/subscriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "=Authorization",
+              "value": "=Bearer {{ $('Merge_After_Token').item.json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1648,
+        9888
+      ],
+      "id": "bed5313d-dd06-48c0-aaf8-f8d54aec8b50",
+      "name": "Get_Subscriptions"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2496,
+        9488
+      ],
+      "id": "9bf68275-1ead-416c-93fb-33d620db2b28",
+      "name": "Loop_Over_Items1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3118c4a3-1143-4197-b004-e2840495f5f9",
+              "leftValue": "={{ $json._noSubscriptions }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2096,
+        9888
+      ],
+      "id": "9bd241ce-14a3-4f92-a1e5-c564c3b15b7d",
+      "name": "Has_Subscriptions_To_Delete1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter subscriptions for this user's webhook\nconst webhookUrl = $vars.Email_Categorization_Webhook_URL;\nconst userEmail = $('Merge_After_Token').item.json.user_email;\nconst allSubs = $input.item.json.value || [];\nconst userId = $('Merge_After_Token').item.json.user_id;\nconst access_token = $('Merge_After_Token').item.json.access_token;\n\nconsole.log(`Total subscriptions in account: ${allSubs.length}`);\nconsole.log(`Looking for subscriptions for user: ${userEmail} (ID: ${userId})`);\n\n// Filter: Our webhook + this user\nconst userSubs = allSubs.filter(sub => {\n  const matchesWebhook = sub.notificationUrl === webhookUrl;\n  const matchesUser = sub.resource && sub.resource.toLowerCase().includes(userEmail.toLowerCase());\n  return matchesWebhook && matchesUser;\n});\n\nconsole.log(`Found ${userSubs.length} subscription(s) for ${userEmail}`);\n\nif (userSubs.length === 0) {\n  console.log(`No existing subscriptions - will create new one`);\n  return [{ \n    json: { \n      _noSubscriptions: true,\n      user_email: userEmail,\n      user_id: userId,\n      access_token: access_token\n    } \n  }];  \n}\n\nconsole.log(`Will delete ${userSubs.length} subscription(s):`);\nuserSubs.forEach((sub, index) => {\n  console.log(`${index + 1}. ID: ${sub.id}`);\n  console.log(`Expires: ${sub.expirationDateTime}`);\n});\n\n// Return each subscription as a separate item for the loop\nreturn userSubs.map(sub => ({\n  json: {\n    _noSubscriptions: false,  \n    subscription_id: sub.id,\n    subscription_resource: sub.resource,\n    subscription_expires: sub.expirationDateTime,\n    user_email: userEmail,\n    user_id: userId,\n    access_token: access_token\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        9888
+      ],
+      "id": "1956f178-3c0f-4416-a8de-d8765a25634b",
+      "name": "Filter_User_Subscriptions",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://graph.microsoft.com/v1.0/subscriptions/{{ $json.subscription_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Filter_User_Subscriptions').item.json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2656,
+        9696
+      ],
+      "id": "6d91c721-b77f-47c6-a817-70ee5c3f71a6",
+      "name": "Delete_Subscription"
+    },
+    {
+      "parameters": {
+        "amount": 0.5
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        9696
+      ],
+      "id": "208773a4-6a88-4af1-a30d-6752b3df6b41",
+      "name": "Wait",
+      "webhookId": "fc7e5e9f-d107-47bf-b911-09b1e2e1989f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/subscriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Filter_User_Subscriptions').item.json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"changeType\": \"created\",\n  \"notificationUrl\": \"{{ $vars.Email_Categorization_Webhook_URL }}\",\n  \"resource\": \"users/{{ $('Filter_User_Subscriptions').item.json.user_email }}/messages\",\n  \"expirationDateTime\": \"{{ $now.plus(3, 'days').toISO() }}\",\n  \"clientState\": \"{{ $('Filter_User_Subscriptions').item.json.user_id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3296,
+        9904
+      ],
+      "id": "78211dac-e715-4e88-94f3-956383462254",
+      "name": "Create_Graph_Subscription1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2912,
+        9472
+      ],
+      "id": "dbf60c1e-8f87-458e-b4a0-f4fba84d7647",
+      "name": "Limit1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: \"Format_Recreate_Result\" (Code Node)\n// Position: Between Create_Graph_Subscription1 and Store_Subscription_ID1\n\nconst createResponse = $input.item.json;\nconst originalUser = $('Filter_User_Subscriptions').item.json;\n\nconsole.log(`📊 Checking subscription creation result...`);\n\n// Check if creation was successful\nif (createResponse.error) {\n  console.error(`❌ RECREATE FAILED: ${createResponse.error.message || JSON.stringify(createResponse.error)}`);\n  return {\n    json: {\n      ...originalUser,\n      recreate_failed: true,\n      error_message: createResponse.error.message || 'Failed to create subscription'\n    }\n  };\n}\n\nif (!createResponse.id || !createResponse.expirationDateTime) {\n  console.error(`❌ RECREATE FAILED: Invalid response from Microsoft`);\n  return {\n    json: {\n      ...originalUser,\n      recreate_failed: true,\n      error_message: 'Invalid response - missing subscription ID or expiration'\n    }\n  };\n}\n\nconsole.log(`✅ RECREATE SUCCESS`);\nconsole.log(`   New subscription ID: ${createResponse.id}`);\nconsole.log(`   New expiry: ${createResponse.expirationDateTime}`);\n\nreturn {\n  json: {\n    ...originalUser,\n    recreate_success: true,  // ✅ CRITICAL: This is what IF_Recreate_Success checks!\n    new_subscription_id: createResponse.id,\n    new_subscription_expires_at: createResponse.expirationDateTime,\n    id: createResponse.id,  // For the database update\n    expirationDateTime: createResponse.expirationDateTime  // For the database update\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3552,
+        9904
+      ],
+      "id": "dc09410f-c13b-4e2d-9d76-3d871738da80",
+      "name": "Format_Recreate_Result"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $json.user_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "subscription_id": "={{ $json.id }}",
+            "subscription_expires_at": "={{ $json.expirationDateTime }}",
+            "last_subscription_renewal": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        3968,
+        9696
+      ],
+      "id": "345a2803-e1cc-4227-93ac-6820652b3f3d",
+      "name": "Store_Subscription_ID1",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.recreate_success }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3776,
+        9904
+      ],
+      "id": "f2f147eb-0fa2-4512-b2cf-f1aa81fd3d9a",
+      "name": "IF_Recreate_Success2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const user = $input.item.json;\n\nconsole.log(`✅ Database updated successfully\\n`);\n\nreturn {\n  json: {\n    user_email: user.user_email,\n    action: 'recreated',\n    success: true,\n    new_subscription_id: user.new_subscription_id\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4224,
+        9696
+      ],
+      "id": "0b6ccbb7-92f3-4e79-a80f-cfd6bf3507ac",
+      "name": "Log_Recreate_Success2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const user = $input.item.json;\n\nconsole.error(`❌ RECREATE FAILED\\n`);\n\nreturn {\n  json: {\n    user_email: user.user_email,\n    action: 'failed',\n    success: false,\n    error: user.error_message || 'Unknown error'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4112,
+        10096
+      ],
+      "id": "b2e5d06e-5762-4546-9b4f-e808d378c1f5",
+      "name": "Log_Recreate_Failure2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        32,
+        9680
+      ],
+      "id": "64b24a04-8dc9-468b-b3e9-cabbf661494e",
+      "name": "Merge_After_Token"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule_Daily_6AM": {
+      "main": [
+        [
+          {
+            "node": "Get_All_Active_Users2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter_Valid_Users": {
+      "main": [
+        [
+          {
+            "node": "Process_Users_One_By_One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process_Users_One_By_One": {
+      "main": [
+        [
+          {
+            "node": "Generate_Final_Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analyze_User_Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze_User_Status": {
+      "main": [
+        [
+          {
+            "node": "IF_Token_Needs_Refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Token_Needs_Refresh": {
+      "main": [
+        [
+          {
+            "node": "Refresh_Access_Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_After_Token",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Refresh_Access_Token": {
+      "main": [
+        [
+          {
+            "node": "IF_Token_Refresh_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Token_Refresh_Success": {
+      "main": [
+        [
+          {
+            "node": "Update_Token_In_DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle_Token_Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update_Token_In_DB": {
+      "main": [
+        [
+          {
+            "node": "Merge_New_Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_New_Token": {
+      "main": [
+        [
+          {
+            "node": "Merge_After_Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle_Token_Failure": {
+      "main": [
+        [
+          {
+            "node": "Deactivate_User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Should_Skip": {
+      "main": [
+        [
+          {
+            "node": "Log_Skip",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF_Can_Renew",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log_Skip": {
+      "main": [
+        [
+          {
+            "node": "Merge_All_Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Can_Renew": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Renewal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Renewal": {
+      "main": [
+        [
+          {
+            "node": "PATCH_Renew_Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PATCH_Renew_Subscription": {
+      "main": [
+        [
+          {
+            "node": "IF_Renewal_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Renewal_Success": {
+      "main": [
+        [
+          {
+            "node": "Update_Renewed_Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle_Renewal_Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update_Renewed_Subscription": {
+      "main": [
+        [
+          {
+            "node": "Log_Renewal_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log_Renewal_Success": {
+      "main": [
+        [
+          {
+            "node": "Merge_All_Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle_Renewal_Failure": {
+      "main": [
+        [
+          {
+            "node": "Get_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_All_Results": {
+      "main": [
+        [
+          {
+            "node": "Track_User_Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track_User_Result": {
+      "main": [
+        [
+          {
+            "node": "Process_Users_One_By_One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_All_Active_Users2": {
+      "main": [
+        [
+          {
+            "node": "Filter_Valid_Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deactivate_User": {
+      "main": [
+        [
+          {
+            "node": "Merge_All_Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get_Subscriptions": {
+      "main": [
+        [
+          {
+            "node": "Filter_User_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop_Over_Items1": {
+      "main": [
+        [
+          {
+            "node": "Limit1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete_Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has_Subscriptions_To_Delete1": {
+      "main": [
+        [
+          {
+            "node": "Loop_Over_Items1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create_Graph_Subscription1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter_User_Subscriptions": {
+      "main": [
+        [
+          {
+            "node": "Has_Subscriptions_To_Delete1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete_Subscription": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop_Over_Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create_Graph_Subscription1": {
+      "main": [
+        [
+          {
+            "node": "Format_Recreate_Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit1": {
+      "main": [
+        [
+          {
+            "node": "Create_Graph_Subscription1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_Recreate_Result": {
+      "main": [
+        [
+          {
+            "node": "IF_Recreate_Success2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store_Subscription_ID1": {
+      "main": [
+        [
+          {
+            "node": "Log_Recreate_Success2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Recreate_Success2": {
+      "main": [
+        [
+          {
+            "node": "Store_Subscription_ID1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log_Recreate_Failure2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log_Recreate_Success2": {
+      "main": [
+        [
+          {
+            "node": "Merge_All_Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log_Recreate_Failure2": {
+      "main": [
+        [
+          {
+            "node": "Merge_All_Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge_After_Token": {
+      "main": [
+        [
+          {
+            "node": "IF_Should_Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "9aefa133-1be0-495d-a73f-408885f4c03b",
+  "meta": {
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "cgBZrSwVlJdEkYqz",
+  "tags": []
+}

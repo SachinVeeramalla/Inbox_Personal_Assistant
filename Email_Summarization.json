@@ -1,0 +1,1315 @@
+{
+  "name": "Email_Summarization",
+  "nodes": [
+    {
+      "parameters": {
+        "html": "={{ $json.body.content }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        4528,
+        -352
+      ],
+      "id": "9f33aa67-31d8-4419-84d1-8e9bcf3d6f74",
+      "name": "Markdown1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "value",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        4256,
+        -352
+      ],
+      "id": "63f26021-7b50-42bb-aaa0-f48c24c14a83",
+      "name": "Split Out2"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        256,
+        -976
+      ],
+      "id": "4219bce7-5d2f-4926-b353-230ee685fe3c",
+      "name": "Get_Users1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        784,
+        -976
+      ],
+      "id": "356199e9-8557-4186-9718-c5b43f741824",
+      "name": "Loop Over Items2"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        32,
+        -976
+      ],
+      "id": "361e766b-06dd-4ce0-901f-11770382054f",
+      "name": "Schedule Trigger4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code Node: Calculate email fetch time range based on user's timezone\nconst userData = $json;\nlet userTz = userData.timezone || \"UTC\";\n\nconst windowsToIana = {\n  \"UTC\": \"UTC\",\n  \"Pacific Standard Time\": \"America/Los_Angeles\",\n  \"Mountain Standard Time\": \"America/Denver\",\n  \"Central Standard Time\": \"America/Chicago\",\n  \"Eastern Standard Time\": \"America/New_York\",\n  \"India Standard Time\": \"Asia/Kolkata\",\n  \"China Standard Time\": \"Asia/Shanghai\",\n  \"Tokyo Standard Time\": \"Asia/Tokyo\",\n  \"AUS Eastern Standard Time\": \"Australia/Sydney\"\n};\n\nfunction looksLikeIana(tz) {\n  return typeof tz === \"string\" && tz.includes(\"/\") && !tz.includes(\"Standard Time\");\n}\n\nif (!looksLikeIana(userTz) && windowsToIana[userTz]) {\n  userTz = windowsToIana[userTz];\n}\n\nconst startUtcISO = $now.setZone(userTz).minus({ hours: 24 }).toUTC().toISO();\nconst endUtcISO = $now.toUTC().toISO();\n\nconsole.log(`Timezone: ${userTz}`);\nconsole.log(`Fetching emails from ${startUtcISO} to ${endUtcISO}`);\n\nreturn [{ json: { ...userData, userTz, startUtcISO, endUtcISO } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -368
+      ],
+      "id": "ff45bce1-5a3d-4cf8-9f8c-1e02771385d6",
+      "name": "Start_and_End_Window1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allUsers = $input.all();\nconst activeUsers = allUsers.filter(user => user.json.is_active === true);\nconsole.log(`✓ Found ${activeUsers.length} active users out of ${allUsers.length} total users`);\nif (activeUsers.length === 0) throw new Error('No active users found');\nreturn activeUsers;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -976
+      ],
+      "id": "fc96bed6-1beb-4fc4-9fc6-e070aa3786ec",
+      "name": "Filter_Active_Users1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get user info from Merge_Email_Response_With_UserData\nconst currentUser = $json;\nconsole.log(`\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`📧 Processing: ${currentUser.user_name} (${currentUser.user_email})`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n`);\n\nreturn [{\n  json: {\n    userId: currentUser.user_id,\n    user_email: currentUser.user_email,\n    userName: currentUser.user_name,\n    timezone: currentUser.timezone || 'America/New_York',\n    access_token: currentUser.access_token,\n    refreshToken: currentUser.refresh_token,\n    tokenExpiresAt: currentUser.token_expires_at,\n    tokenExpiresAtUnix: currentUser.token_expires_at_unix,\n    subscriptionId: currentUser.subscription_id,\n    subscriptionExpiresAt: currentUser.subscription_expires_at,\n    summaryPreference: currentUser.summary_preference,\n    processingStartTime: Date.now()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -384
+      ],
+      "id": "4bd5df68-b056-4a94-af34-76473ffff780",
+      "name": "Set_User_Context1"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/me/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$select",
+              "value": "id,subject,receivedDateTime,from,bodyPreview,body,categories,isRead,parentFolderId,inferenceClassification,importance,hasAttachments"
+            },
+            {
+              "name": "$top",
+              "value": "100"
+            },
+            {
+              "name": "$orderby",
+              "value": "receivedDateTime desc"
+            },
+            {
+              "name": "$filter",
+              "value": "={{ `receivedDateTime ge ${$json.startUtcISO} and receivedDateTime lt ${$json.endUtcISO} and isRead eq false and from/emailAddress/address ne '${$json.user_email}'` }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body['@odata.nextLink'] }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body['@odata.nextLink'] }}",
+              "limitPagesFetched": true,
+              "maxRequests": 10,
+              "requestInterval": 1000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3120,
+        -368
+      ],
+      "id": "9045fc05-f382-43d5-8b6e-b24dacb700e5",
+      "name": "Fetch_User_Emails1"
+    },
+    {
+      "parameters": {
+        "operation": "sanitize",
+        "text": "={{ $json.contentForAI }}",
+        "guardrails": {
+          "pii": {
+            "value": {
+              "type": "all"
+            }
+          },
+          "secretKeys": {
+            "value": {
+              "permissiveness": "strict"
+            }
+          },
+          "urls": {
+            "value": {
+              "allowedUrls": ""
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.guardrails",
+      "typeVersion": 1,
+      "position": [
+        4992,
+        -352
+      ],
+      "id": "0096bd8d-b123-455f-b844-3693742adcf3",
+      "name": "Guardrails1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FORMAT FOR AI - EMAIL SUMMARIZATION WITH ACTION ITEMS\nconst guardrailsItems = $input.all();\n\n// Get emailIds from Prepare_Email_Data node (before Guardrails)\nlet emailIdsFromPrepare = [];\ntry {\n  const prepareNode = $('Prepare_Email_Data');\n  if (prepareNode && prepareNode.all().length > 0) {\n    emailIdsFromPrepare = prepareNode.all().map(item => item.json.emailId);\n    console.log(`✓ Retrieved ${emailIdsFromPrepare.length} emailIds from Prepare_Email_Data`);\n  }\n} catch (e) {\n  console.error('Failed to get emailIds from Prepare_Email_Data:', e.message);\n}\n\n// If Prepare_Email_Data doesn't have emailIds, try HTTP Request (raw data)\nif (emailIdsFromPrepare.length === 0) {\n  try {\n    const httpNode = $('HTTP Request');\n    if (httpNode && httpNode.first().json.value) {\n      emailIdsFromPrepare = httpNode.first().json.value.map(email => email.id);\n      console.log(`✓ Retrieved ${emailIdsFromPrepare.length} emailIds from HTTP Request`);\n    }\n  } catch (e) {\n    console.error('Failed to get emailIds from HTTP Request:', e.message);\n  }\n}\n\nreturn guardrailsItems.map((item, index) => {\n  // Get the masked content from Guardrails\n  const maskedContent = item.json.guardrailsInput;\n  \n  if (!maskedContent) {\n    throw new Error(`No guardrailsInput found for item ${index}. Check Guardrails node.`);\n  }\n  \n  // Parse the masked content\n  const lines = maskedContent.split('\\n');\n  let subject = '';\n  let from = '';\n  let domain = '';\n  let body = '';\n  \n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i];\n    \n    if (line.startsWith('Subject: ')) {\n      subject = line.replace('Subject: ', '').trim();\n    } else if (line.startsWith('From: ')) {\n      from = line.replace('From: ', '').trim();\n    } else if (line.startsWith('Domain: ')) {\n      domain = line.replace('Domain: ', '').trim();\n    } else if (line.startsWith('Body: ')) {\n      body = lines.slice(i).join('\\n').replace('Body: ', '').trim();\n      break;\n    }\n  }\n  \n  // Create AI summarization prompt\n  const aiPrompt = `Act as my executive assistant and analyze this email.\n\n**Email Details:**\nSubject: ${subject}\nFrom: ${from}\nDomain: ${domain}\n\n**Email Body:**\n${body}\n\n**Privacy Notice:**\nSome content is masked for security:\n- <EMAIL_ADDRESS> = email address (redacted)\n- <URL> = web address (redacted)\n- <SECRET> = sensitive information (redacted)\n- <MEETING_ID> = meeting ID (redacted)\n- <PASSCODE> = passcode (redacted)\n\nFocus on the unmasked context, keywords, and patterns to understand intent.\n\n**Your Task:**\n1. Summarize this email in 2-3 concise bullet points\n2. Extract ALL action items with deadlines (if mentioned)\n3. Identify the urgency level (URGENT, HIGH, MEDIUM, LOW)\n4. Note the email type (Meeting, Request, FYI, Promotional, etc.)\n\n**Response Format (JSON only):**\n{\n  \"summary\": [\n    \"Key point 1\",\n    \"Key point 2\",\n    \"Key point 3\"\n  ],\n  \"actionItems\": [\n    {\n      \"action\": \"What needs to be done\",\n      \"deadline\": \"Date/time or 'Not specified'\",\n      \"priority\": \"HIGH/MEDIUM/LOW\"\n    }\n  ],\n  \"urgency\": \"URGENT|HIGH|MEDIUM|LOW\",\n  \"emailType\": \"Meeting|Request|FYI|Promotional|OOO|System\",\n  \"requiresResponse\": true|false,\n  \"estimatedReadTime\": \"30 seconds\",\n  \"keyInsight\": \"Most important takeaway in one sentence\"\n}\n\n**Guidelines:**\n- Keep summary bullets under 20 words each\n- If no action items, return empty array []\n- If no deadline mentioned, use \"Not specified\"\n- Be concise but don't miss critical information\n- Focus on what I need to know and do`;\n  \n  // ============= CRITICAL: Get real emailId from Prepare_Email_Data =============\n  const emailId = emailIdsFromPrepare[index];\n  \n  if (!emailId) {\n    throw new Error(\n      `No emailId found at index ${index}.\\n` +\n      `Retrieved ${emailIdsFromPrepare.length} emailIds total.\\n` +\n      `This usually means Prepare_Email_Data or HTTP Request didn't execute properly.`\n    );\n  }\n  \n  // Validate emailId (Microsoft Graph IDs are long)\n  if (emailId.startsWith('item-') || emailId.length < 50) {\n    throw new Error(\n      `Invalid emailId at index ${index}: \"${emailId}\"\\n` +\n      `EmailId is too short or has wrong format.\\n` +\n      `Check Prepare_Email_Data output to ensure email.id is being captured.`\n    );\n  }\n  \n  console.log(`Item ${index}: emailId=${emailId.substring(0, 30)}..., subject=${subject}`);\n  \n  return {\n    json: {\n      itemIndex: index,\n      subject: subject,\n      from: from,\n      domain: domain,\n      \n      // AI Prompt for summarization\n      aiPrompt: aiPrompt,\n      \n      // CRITICAL: Include the real emailId here\n      emailId: emailId,\n      \n      // Original content\n      maskedContent: maskedContent,\n      \n      // Metadata\n      guardrailsApplied: true,\n      processedAt: new Date().toISOString(),\n      checks: item.json.checks || null\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5216,
+        -352
+      ],
+      "id": "797dd0d4-e8f1-4d5c-8554-926f7e50f82b",
+      "name": "Format_for_AI1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.aiPrompt }}",
+        "options": {
+          "systemMessage": "=You are an expert executive assistant specializing in email management and triage. Your role is to help busy professionals quickly understand their emails and identify what requires immediate attention.\n\nYour Core Responsibilities:\n1. Summarize emails concisely while preserving all critical information\n2. Extract actionable items with clear deadlines and priorities\n3. Assess urgency accurately based on content, tone, and context\n4. Identify email types to help with organization and workflow\n5. Flag emails that require responses or follow-up\n\nContext You're Working With:\n- You receive emails that may contain masked sensitive data for privacy protection\n- Masked elements include: <EMAIL_ADDRESS>, <URL>, <SECRET>, <MEETING_ID>, <PASSCODE>\n- Focus on the unmasked content, context clues, keywords, and communication patterns\n- Email domains and sender information help determine legitimacy and priority\n\nOutput Requirements:\nYou MUST respond with valid JSON in this exact structure:\n{\n  \"summary\": [\"bullet point 1\", \"bullet point 2\", \"bullet point 3\"],\n  \"actionItems\": [\n    {\n      \"action\": \"clear description of what needs to be done\",\n      \"deadline\": \"specific date/time or 'Not specified'\",\n      \"priority\": \"HIGH|MEDIUM|LOW\"\n    }\n  ],\n  \"urgency\": \"URGENT|HIGH|MEDIUM|LOW\",\n  \"emailType\": \"Meeting|Request|FYI|Promotional|OOO|System|Cancelled|Newsletter\",\n  \"requiresResponse\": true|false,\n  \"estimatedReadTime\": \"X seconds/minutes\",\n  \"keyInsight\": \"one sentence capturing the most important takeaway\"\n}\n\nSummary Guidelines:\n- Maximum 3 bullet points (fewer if email is simple)\n- Each bullet point should be 15-25 words\n- Use clear, direct language without filler words\n- Focus on: Who, What, When, Why (if relevant)\n- Avoid restating the subject line\n- Highlight any deadlines, decisions, or changes\n\nAction Items Guidelines:\n- Extract ALL tasks, requests, or follow-ups mentioned\n- If multiple people are mentioned, note who should do what\n- Deadlines: Be specific when mentioned, otherwise use \"Not specified\"\n- Priority levels:\n  * HIGH: Explicit urgency, near deadlines, C-suite requests\n  * MEDIUM: Standard requests, reasonable timeframes\n  * LOW: FYI items, optional tasks, distant deadlines\n- If NO action items exist, return an empty array: []\n\nUrgency Assessment:\n- URGENT: Requires immediate attention (within hours), blocking issues, critical deadlines\n- HIGH: Important but not immediate (within 1-2 days), key decisions needed\n- MEDIUM: Normal priority (within a week), routine matters\n- LOW: FYI, no immediate action needed, informational only\n\nEmail Type Classification:\n- Meeting: Calendar invites, meeting requests, scheduling\n- Request: Asking for something (information, approval, action)\n- FYI: Informational only, no action required\n- Promotional: Marketing, newsletters, advertisements\n- OOO: Out of office notifications\n- System: Automated notifications, receipts, confirmations\n- Cancelled: Meeting cancellations, event changes\n- Newsletter: Regular updates, digests\n\nResponse Required Assessment:\nConsider true if:\n- Direct questions are asked\n- Approval or decision is requested\n- RSVP or confirmation needed\n- Follow-up explicitly mentioned\n- Professional courtesy requires acknowledgment\n\nSpecial Handling:\n- Meeting cancellations: Always note in summary and keyInsight\n- Out of office: Identify date range if mentioned\n- Internal emails (same domain): May indicate higher priority\n- External vendors/clients: Context matters for urgency\n- Template/form letters: Often lower priority unless personalized\n\nTone and Style:\n- Professional and neutral\n- Action-oriented language\n- No unnecessary pleasantries or filler\n- Be direct and specific\n- Use active voice\n\nWhat NOT to Do:\n- Don't invent information not in the email\n- Don't make assumptions about masked content\n- Don't include personal opinions\n- Don't restate obvious information\n- Don't exceed 3 summary bullet points\n- Don't use corporate jargon unnecessarily\n- Don't respond with anything other than valid JSON\n\nQuality Checklist:\nBefore finalizing your response, verify:\n- All action items have been extracted\n- Urgency level matches email content and tone\n- Summary is concise and informative\n- JSON is properly formatted and valid\n- No hallucinated or assumed information\n- Response requirement is logical\n- Key insight captures the essence in one sentence\n\nYour goal is to save the user time while ensuring they don't miss critical information or deadlines. Be thorough but concise.",
+          "batching": {
+            "batchSize": 3,
+            "delayBetweenBatches": 3000
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        5424,
+        -352
+      ],
+      "id": "7c2977b9-2b73-42cd-8518-138417e8a588",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "Sachi_gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "Sachi_gpt-4.1-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        5312,
+        -80
+      ],
+      "id": "0b8276f4-3d48-4737-9f20-b8495d5f3df6",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "1CvVBkpLYlp8kq6O",
+          "name": "Sachin_LiteLLM_OpenAI_API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// PARSE AI SUMMARIZATION OUTPUT\nconst aiOutputItems = $input.all();\n\n// Get original email data from Format_for_AI node\nlet originalEmailData = [];\ntry {\n  const formatNode = $('Format_for_AI1');\n  if (formatNode && formatNode.all().length > 0) {\n    originalEmailData = formatNode.all().map(item => item.json);\n    console.log(`✓ Retrieved ${originalEmailData.length} emails from Format_for_AI`);\n  }\n} catch (e) {\n  console.error('Failed to get data from Format_for_AI:', e.message);\n}\n\n// Get userData (accessToken, userEmail, userId) from Intelligent_Filtering1\nlet userData = {};\ntry {\n  const mergeNode = $('Merge_Email_Response_With_UserData');\n  if (mergeNode && mergeNode.first()) {\n    userData = mergeNode.first().json.userData || {};\n    console.log(`✓ Retrieved userData for ${userData.user_email}`);\n  }\n} catch (e) {\n  console.error('Failed to get userData from Merge_Email_Response_With_UserData:', e.message);\n}\n\n// Extract the data array from the first item\nconst dataArray = aiOutputItems[0]?.json?.data || [];\n\nif (dataArray.length === 0) {\n  throw new Error('No AI output data found in input');\n}\n\nconsole.log(`Processing ${dataArray.length} AI outputs`);\n\n// ✅ NEW: Process all emails into an array\nconst processedEmails = dataArray.map((item, index) => {\n  const rawOutput = item.output;\n  \n  if (!rawOutput) {\n    console.error(`No output found at index ${index}`);\n    return {\n      error: true,\n      errorMessage: 'No output found',\n      index: index\n    };\n  }\n  \n  let aiData;\n  try {\n    aiData = JSON.parse(rawOutput);\n  } catch (parseError) {\n    console.error(`Failed to parse AI output at index ${index}:`, parseError.message);\n    return {\n      error: true,\n      errorMessage: `Failed to parse AI response`,\n      index: index,\n      rawOutput: rawOutput\n    };\n  }\n  \n  const originalEmail = originalEmailData[index] || {};\n  const summary = aiData.summary || [];\n  const actionItems = aiData.actionItems || [];\n  const urgency = aiData.urgency || 'MEDIUM';\n  const emailType = aiData.emailType || 'Unknown';\n  const requiresResponse = aiData.requiresResponse !== undefined ? aiData.requiresResponse : false;\n  const estimatedReadTime = aiData.estimatedReadTime || 'Unknown';\n  const keyInsight = aiData.keyInsight || '';\n  \n  const actionItemsCount = actionItems.length;\n  const highPriorityActions = actionItems.filter(a => a.priority === 'HIGH').length;\n  const hasDeadlines = actionItems.some(a => a.deadline !== 'Not specified');\n  \n  const urgencyIndicator = {\n    'URGENT': '🔴',\n    'HIGH': '🟠',\n    'MEDIUM': '🟡',\n    'LOW': '🟢'\n  }[urgency] || '⚪';\n  \n  console.log(`✓ Processed email ${index + 1}: ${originalEmail.subject || 'No subject'}`);\n  \n  // ✅ Return email data WITHOUT user credentials\n  return {\n    emailId: originalEmail.emailId,\n    subject: originalEmail.subject,\n    from: originalEmail.from,\n    domain: originalEmail.domain,\n    summary: summary,\n    actionItems: actionItems,\n    actionItemsCount: actionItemsCount,\n    urgency: urgency,\n    urgencyIndicator: urgencyIndicator,\n    emailType: emailType,\n    requiresResponse: requiresResponse,\n    estimatedReadTime: estimatedReadTime,\n    keyInsight: keyInsight,\n    metrics: {\n      totalActions: actionItemsCount,\n      highPriorityActions: highPriorityActions,\n      hasDeadlines: hasDeadlines,\n      needsReply: requiresResponse,\n      isUrgent: urgency === 'URGENT' || urgency === 'HIGH'\n    },\n    processedAt: new Date().toISOString()\n  };\n});\n\n// ✅ NEW: Return a SINGLE item with emails array + user credentials\n// At the end of Parse AI Output1, update the return statement:\n\nreturn [{\n  json: {\n    emails: processedEmails,\n    \n    // User credentials at the top level (shared by all emails)\n    accessToken: userData.access_token,\n    userEmail: userData.user_email,\n    userId: userData.userId,\n    summaryPreference: userData.summaryPreference, \n    \n    // Metadata\n    totalEmails: processedEmails.length,\n    processedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5952,
+        -352
+      ],
+      "id": "c35aee00-674d-4990-88eb-b2929edb0a89",
+      "name": "Parse AI Output1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============= UNIVERSAL PII MASKING FUNCTION =============\nfunction maskAllPII(text) {\n  if (!text) return text;\n  \n  let masked = text;\n  \n  // Define masking patterns in order of specificity (most specific first)\n  const patterns = [\n    // ===== SECTION 1: GOVERNMENT IDs (MOST SPECIFIC) =====\n    {\n      regex: /\\b(Passport|Passport\\s*Number|Passport\\s*#|Travel\\s*Document)[\\s:]+([A-Z]?\\d{6,9})\\b/gi,\n      replacement: (match, label) => `${label}: <PASSPORT>`\n    },\n    {\n      regex: /\\b(Aadhaar|Aadhar)[\\s:]+(\\d{4}\\s+\\d{4}\\s+\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <AADHAAR>`\n    },\n    {\n      regex: /\\b(PAN|PAN\\s*Number)[\\s:]+([A-Z]{5}\\d{4}[A-Z])\\b/gi,\n      replacement: (match, label) => `${label}: <PAN>`\n    },\n    {\n      regex: /\\b(National\\s*Insurance|NI\\s*Number)[\\s:]+([A-Z]{2}\\s*\\d{2}\\s*\\d{2}\\s*\\d{2}\\s*[A-Z])\\b/gi,\n      replacement: (match, label) => `${label}: <NI_NUMBER>`\n    },\n    {\n      regex: /\\b(SSN|Social\\s*Security\\s*Number|Social\\s*Security)[\\s:]+(\\d{3}[-\\s]\\d{2}[-\\s]\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <SSN>`\n    },\n    {\n      regex: /\\b(EIN|Tax\\s*ID|Employer\\s*ID)[\\s:]+(\\d{2}[-\\s]\\d{7})\\b/gi,\n      replacement: (match, label) => `${label}: <EIN>`\n    },\n    {\n      regex: /\\b(Driver'?s?\\s*License|DL|License\\s*Number|Driving\\s*License|Licence)[\\s:]+([A-Z]{2}\\s*[A-Z0-9\\s-]{5,15})\\b/gi,\n      replacement: (match, label) => `${label}: <LICENSE>`\n    },\n    {\n      regex: /\\b(National\\s*ID|ID\\s*Number|Citizen\\s*ID|Tax\\s*ID|Taxpayer\\s*ID|TIN|Registration\\s*Number)[\\s:]+([A-Z0-9\\s-]{6,20})\\b/gi,\n      replacement: (match, label) => `${label}: <GOV_ID>`\n    },\n    \n    // ===== SECTION 2: DATES (BEFORE OTHER PATTERNS) =====\n    {\n      regex: /\\b(DOB|Date\\s*of\\s*Birth|Birth\\s*Date|Born|Birthday)[\\s:]+([A-Za-z]+\\s+\\d{1,2},?\\s+\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <DOB>`\n    },\n    {\n      regex: /\\b(DOB|Date\\s*of\\s*Birth|Birth\\s*Date|Birthday)[\\s:]+(\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4})\\b/gi,\n      replacement: (match, label) => `${label}: <DOB>`\n    },\n    {\n      regex: /\\b(Expires|Expiration|Exp\\s*Date|Valid\\s*Until|Exp)[\\s:]+(\\d{2}\\/\\d{2,4}|\\d{2}[-]\\d{2,4})\\b/gi,\n      replacement: (match, label) => `${label}: <EXPIRY_DATE>`\n    },\n    {\n      regex: /\\b(Contract\\s*Renewal|Renewal\\s*Date|Contract\\s*Date|Expiry)[\\s:]+(\\d{1,2}\\/\\d{1,2}\\/\\d{2,4})\\b/gi,\n      replacement: (match, label) => `${label}: <CONTRACT_DATE>`\n    },\n    {\n      regex: /\\b(Customer\\s*Since|Member\\s*Since|Client\\s*Since|Joined|Registered)[\\s:]+(\\d{1,2}\\/\\d{1,2}\\/\\d{2,4})\\b/gi,\n      replacement: (match, label) => `${label}: <MEMBER_DATE>`\n    },\n    {\n      regex: /\\b(Last\\s*Purchase|Purchase\\s*Date|Order\\s*Date)[\\s:]+(\\d{1,2}\\/\\d{1,2}\\/\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <PURCHASE_DATE>`\n    },\n    \n    // ===== SECTION 3: CONTACT INFORMATION =====\n    {\n      regex: /\\+\\d{1,4}[\\s\\-]?\\d{2,4}[\\s\\-]?\\d{3,4}[\\s\\-]?\\d{3,5}/g,\n      replacement: '<PHONE>'\n    },\n    {\n      regex: /\\b\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}\\b/g,\n      replacement: '<PHONE>'\n    },\n    {\n      regex: /\\b(Phone|Telephone|Tel|Mobile|Cell|Contact|Emergency|Fax|Direct|Office|Home|Work)[\\s:]+([+\\d\\s\\-().]{8,20})\\b/gi,\n      replacement: (match, label) => `${label}: <PHONE>`\n    },\n    {\n      regex: /\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b/g,\n      replacement: '<EMAIL>'\n    },\n    \n    // ===== SECTION 4: FINANCIAL - CREDIT CARDS =====\n    {\n      regex: /\\b(?:\\d{4}[-\\s]?){3}\\d{4}\\b/g,\n      replacement: '<CARD>'\n    },\n    {\n      regex: /\\b(?:\\*{4}|X{4}|xxxx)[\\s\\-]?(?:\\*{4}|X{4}|xxxx)[\\s\\-]?(?:\\*{4}|X{4}|xxxx)[\\s\\-]?\\d{4}\\b/gi,\n      replacement: '<CARD>'\n    },\n    {\n      regex: /\\b(Credit\\s*Card|Card|Amex|Visa|Mastercard|Corporate\\s*Amex)[\\s:]*\\([^)]*last\\s*4[\\s:]*(\\d{4})\\)/gi,\n      replacement: (match, label) => `${label.trim()} (last 4: <CARD_LAST4>)`\n    },\n    {\n      regex: /\\b(Credit\\s*Card|Card)[\\s:]*(?:ending\\s*in|last\\s*4)[\\s:]*(\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <CARD_LAST4>`\n    },\n    {\n      regex: /\\b(Card\\s*Type|Type)[\\s:]+\\b(Visa|Mastercard|Master\\s*Card|American\\s*Express|Amex|Discover|Diners|JCB|UnionPay)\\b/gi,\n      replacement: (match, label) => `${label}: <CARD_TYPE>`\n    },\n    {\n      regex: /\\b(CVV|Security\\s*Code|CVC)[\\s:]+(\\d{3,4})\\b/gi,\n      replacement: (match, label) => `${label}: <CVV>`\n    },\n    \n    // ===== SECTION 5: FINANCIAL - BANK ACCOUNTS =====\n    {\n      regex: /\\b[A-Z]{2}\\d{2}\\s*[A-Z0-9]{4}\\s*\\d{4}\\s*\\d{4}\\s*\\d{4}\\s*\\d{2,4}\\b/g,\n      replacement: '<IBAN>'\n    },\n    {\n      regex: /\\b(Sort\\s*Code)[\\s:]+(\\d{2}[-\\s]\\d{2}[-\\s]\\d{2})\\b/gi,\n      replacement: (match, label) => `${label}: <SORT_CODE>`\n    },\n    {\n      regex: /\\b(IFSC\\s*Code|IFSC)[\\s:]+([A-Z]{4}0[A-Z0-9]{6})\\b/gi,\n      replacement: (match, label) => `${label}: <IFSC>`\n    },\n    {\n      regex: /\\b(SWIFT|SWIFT\\s*Code|BIC)[\\s:]+([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\\b/gi,\n      replacement: (match, label) => `${label}: <SWIFT>`\n    },\n    {\n      regex: /\\b(Routing|Routing\\s*Number|ABA)[\\s:]+(\\d{9})\\b/gi,\n      replacement: (match, label) => `${label}: <ROUTING>`\n    },\n    {\n      regex: /\\b(Bank\\s*Account|Account\\s*Number|Account|Savings\\s*Account|Checking\\s*Account)[\\s:]+(?:\\*{4}|X{4}|xxxx)\\d{4,6}\\b/gi,\n      replacement: (match, label) => `${label}: <ACCOUNT>`\n    },\n    {\n      regex: /\\b(Account\\s*Number|Account|Bank\\s*Account|Savings\\s*Account|Checking\\s*Account)[\\s:]+([A-Z0-9\\s-]{8,20})\\b/gi,\n      replacement: (match, label) => `${label}: <ACCOUNT>`\n    },\n    \n    // ===== SECTION 6: CURRENCY & AMOUNTS =====\n    // Specific labeled amounts first\n    {\n      regex: /\\b(Account\\s*Value|Annual\\s*Value|Contract\\s*Value|Total|Amount|Balance|Revenue|Payment|Price|Cost|Fee|Charge|Salary|Wage|Income|Profit|Loss|Budget|Spend|Invoice|Bill|Rate|Premium|Tax|VAT|GST|Sales\\s*Tax|Discount|Rebate|Refund|Penalty|Fine|Surcharge|Debit|Credit|Withdrawal|Deposit|Transfer)[\\s:]+\\$?[\\d,]+\\.?\\d{0,2}(?:\\/year|\\/month|\\/quarter|\\/day|\\/hour|per\\s+year|per\\s+month|annually|monthly)?%?\\b/gi,\n      replacement: (match, label) => `${label}: <AMOUNT>`\n    },\n    // Currency symbols\n    {\n      regex: /[$€£¥₹₽₩₪₦₱₡₴₵₸₺¤][\\d,]+\\.?\\d{0,2}\\b/g,\n      replacement: '<AMOUNT>'\n    },\n    // Currency codes before amount\n    {\n      regex: /\\b(USD|EUR|GBP|JPY|CNY|INR|CAD|AUD|CHF|SEK|NZD|SGD|HKD|KRW|MXN|BRL|ZAR|RUB|AED|SAR)\\s+[\\d,]+\\.?\\d{0,2}\\b/gi,\n      replacement: '<AMOUNT>'\n    },\n    // Currency codes after amount\n    {\n      regex: /\\b[\\d,]+\\.?\\d{0,2}\\s+(USD|EUR|GBP|JPY|CNY|INR|CAD|AUD|CHF|SEK|NZD|SGD|HKD|KRW|MXN|BRL|ZAR|RUB|AED|SAR)\\b/gi,\n      replacement: '<AMOUNT>'\n    },\n    // Abbreviated amounts\n    {\n      regex: /\\$[\\d,]+\\.?\\d{0,2}\\s*([KMBT]|million|billion|trillion|thousand)\\b/gi,\n      replacement: '<AMOUNT>'\n    },\n    {\n      regex: /\\b[\\d,]+\\.?\\d{0,2}\\s*([KMBT]|million|billion|trillion|thousand)\\s+(USD|EUR|GBP|dollars|euros|pounds)\\b/gi,\n      replacement: '<AMOUNT>'\n    },\n    // Negative amounts\n    {\n      regex: /-\\$[\\d,]+\\.?\\d{0,2}\\b/g,\n      replacement: '<AMOUNT>'\n    },\n    {\n      regex: /\\(\\$?[\\d,]+\\.?\\d{0,2}\\)/g,\n      replacement: '<AMOUNT>'\n    },\n    // Amount ranges\n    {\n      regex: /\\$[\\d,]+\\.?\\d{0,2}\\s*[-–—]\\s*\\$?[\\d,]+\\.?\\d{0,2}\\b/g,\n      replacement: '<AMOUNT_RANGE>'\n    },\n    {\n      regex: /\\$[\\d,]+\\.?\\d{0,2}\\s+to\\s+\\$?[\\d,]+\\.?\\d{0,2}\\b/gi,\n      replacement: '<AMOUNT_RANGE>'\n    },\n    // European format\n    {\n      regex: /\\b\\d{1,3}(?:\\.\\d{3})+,\\d{2}\\b/g,\n      replacement: '<AMOUNT>'\n    },\n    // Amounts in sentences\n    {\n      regex: /\\b(paid|worth|costs?|valued|priced|charged|invoiced|billed)\\s+\\$?[\\d,]+\\.?\\d{0,2}\\b/gi,\n      replacement: (match, verb) => `${verb} <AMOUNT>`\n    },\n    \n    // ===== SECTION 7: PERCENTAGES & METRICS =====\n    {\n      regex: /\\b\\d+\\.?\\d{0,4}%\\b/g,\n      replacement: '<PERCENTAGE>'\n    },\n    {\n      regex: /\\b(P\\/E\\s*Ratio|ROI|APR|APY|Interest\\s*Rate|Rate|Ratio|Multiple|Margin)[\\s:]+\\d+\\.?\\d{0,4}%?\\b/gi,\n      replacement: (match, label) => `${label}: <METRIC>`\n    },\n    \n    // ===== SECTION 8: ADDRESSES (AFTER DATES TO AVOID CONFLICTS) =====\n    {\n      regex: /\\b(Address|Home\\s*Address|Business\\s*Address|UK\\s*Address|India\\s*Address|Mailing\\s*Address|Billing\\s*Address|Shipping\\s*Address)[\\s:]+([^\\n]{15,150}(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Flat|Suite|Apartment|Building|Sector|District|Kingdom|India|USA|UK)[^\\n]{0,50})/gi,\n      replacement: (match, label) => `${label}: <ADDRESS>`\n    },\n    {\n      regex: /\\b(Flat|Apartment|Apt|Unit|Suite|Building)\\s+[A-Za-z0-9-]+[,\\s]*[^\\n]{0,100}/gi,\n      replacement: '<ADDRESS>'\n    },\n    {\n      regex: /\\b\\d{1,6}\\s+[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,4}\\s*(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct)[^\\n,]{0,50}/gi,\n      replacement: '<ADDRESS>'\n    },\n    {\n      regex: /\\b[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*,\\s*[A-Z]{2}\\s+\\d{5}(?:-\\d{4})?\\b/g,\n      replacement: '<ADDRESS>'\n    },\n    {\n      regex: /\\b(Suite|Apt|Unit|Apartment|Floor|Room)\\s+[A-Za-z0-9-]+\\b/gi,\n      replacement: '<ADDRESS>'\n    },\n    {\n      regex: /\\b(Address|Home\\s*Address|Business\\s*Address|Billing\\s*Address|Shipping\\s*Address|Mailing\\s*Address)[\\s:]*\\n([^\\n]+\\n(?:[^\\n]+\\n){0,3}[A-Za-z\\s]+,\\s*[A-Z]{2}\\s+\\d{5}(?:-\\d{4})?)/gi,\n      replacement: (match, label) => `${label}:\\n<ADDRESS>`\n    },\n    \n    // ===== SECTION 9: NAMES =====\n    {\n      regex: /\\b(Name|Full\\s*Name|Legal\\s*Name|Contact\\s*Name|Patient\\s*Name|Employee\\s*Name|Preferred\\s*Name|Contact\\s*Person|Account\\s*Holder|Cardholder|Card\\s*Holder)[\\s:]+([A-Z][a-z]+(?:[\\s-][A-Z][a-z]+){1,5})\\b/g,\n      replacement: (match, label) => `${label}: <NAME>`\n    },\n    \n    // ===== SECTION 10: AUTHENTICATION & SECURITY =====\n    // ===== SECTION 10: AUTHENTICATION & SECURITY =====\n{\n  regex: /\\b(Password|Pass\\s*word|Temporary\\s*Password|Initial\\s*Password|Temp\\s*Password|Secret\\s*Word|Passphrase|PIN|Passcode)[\\s:]+([^\\s\\r\\n,;<>]{4,30})\\b/gi,\n  replacement: (match, label, pwd) => {\n    if (match.includes('<') && match.includes('>')) return match;\n    return `${label}: <PASSWORD>`;\n  }\n},\n{\n  regex: /\\b(Username|User\\s*Name|Login|User\\s*ID)[\\s:]+([a-zA-Z][a-zA-Z0-9_.-]{2,20})\\b/gi,\n  replacement: (match, label) => `${label}: <USERNAME>`\n},\n{\n  regex: /\\b(API\\s*Key|Token|Bearer|Secret\\s*Key|Access\\s*Token|Auth\\s*Token)[\\s:]+([A-Za-z0-9_\\-]{20,})\\b/gi,\n  replacement: (match, label) => `${label}: <API_KEY>`\n},\n{\n  regex: /\\beyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}(?:\\.[A-Za-z0-9_-]{20,})?\\b/g,\n  replacement: '<JWT_TOKEN>'\n},\n{\n  regex: /\\b(Verification\\s*Code|One[-\\s]?Time\\s*Password|OTP|Security\\s*Code|Approval\\s*Code)(?:\\s+is)?[\\s:]+([A-Z0-9-]{6,20})\\b/gi,\n  replacement: (match, label) => `${label}: <VERIFICATION_CODE>`\n},\n{\n  regex: /\\b(One[-\\s]?Time\\s*Password|OTP|Verification\\s*Code|Security\\s*Code)[\\s:]+(\\d{6,8})\\b/gi,\n  replacement: (match, label) => `${label}: <OTP>`\n},\n\n// ===== SECURITY QUESTIONS & ANSWERS =====\n// Pattern 1: Labeled security questions (Q1:, Q2:, etc.)\n{\n  regex: /\\bQ\\d+[\\s:]+([^-\\n]+?)\\s*[-–—]\\s*([^\\n]{2,50})/gi,\n  replacement: (match, question, answer) => {\n    const qNum = match.match(/Q\\d+/i)[0];\n    return `${qNum}: <SECURITY_QUESTION> - <SECURITY_ANSWER>`;\n  }\n},\n\n// Pattern 2: Common security question formats with answers\n{\n  regex: /\\b(Mother'?s?\\s*maiden\\s*name|Maiden\\s*name|Mother'?s?\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(First\\s*pet|Pet'?s?\\s*name|Childhood\\s*pet|Favorite\\s*pet)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(City\\s*born|Birth\\s*city|Place\\s*of\\s*birth|Birthplace|Born\\s*in|Hometown)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Elementary\\s*school|Primary\\s*school|First\\s*school|School\\s*attended)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,4})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*teacher|First\\s*teacher|Teacher'?s?\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*color|Favourite\\s*color)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*food|Favourite\\s*food)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(First\\s*car|First\\s*vehicle|Car\\s*make|Car\\s*model)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z0-9]+)?)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Childhood\\s*friend|Best\\s*friend|Friend'?s?\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Street\\s*grew\\s*up|Childhood\\s*street|Street\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,3})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Father'?s?\\s*middle\\s*name|Dad'?s?\\s*middle\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Mother'?s?\\s*middle\\s*name|Mom'?s?\\s*middle\\s*name)[\\s:]+[-–—]?\\s*([A-Z][a-z]+)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(High\\s*school|Secondary\\s*school|College|University)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,4})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*movie|Favourite\\s*movie|Favorite\\s*film)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,4})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*book|Favourite\\s*book)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,4})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n{\n  regex: /\\b(Favorite\\s*band|Favourite\\s*band|Favorite\\s*artist)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,3})\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n\n// Pattern 3: Generic \"Security Question\" label\n{\n  regex: /\\b(Security\\s*Question|Challenge\\s*Question|Secret\\s*Question)[\\s:]+([^\\n]{3,100})/gi,\n  replacement: (match, label) => `${label}: <SECURITY_QUESTION>`\n},\n\n// Pattern 4: \"Security Questions:\" section header followed by Q/A pairs\n{\n  regex: /\\b(Security\\s*Questions?)[\\s:]*\\n((?:\\s*[QA]\\d*[\\s:][^\\n]+\\n?){1,10})/gi,\n  replacement: (match, header) => {\n    // Mask all answers in the section\n    let masked = match.replace(/[-–—]\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*)/g, '- <SECURITY_ANSWER>');\n    return masked;\n  }\n},\n\n// Pattern 5: Answer format without label (fallback - be careful with this one)\n// Only use if answer follows a clear security question context\n{\n  regex: /\\b(Answer|Response|Reply)[\\s:]+[-–—]?\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?)\\b/gi,\n  replacement: (match, label) => `${label}: <SECURITY_ANSWER>`\n},\n    \n    // ===== SECTION 11: INSURANCE & MEDICAL =====\n    {\n      regex: /\\b(Policy|Policy\\s*Number|Insurance\\s*Policy|Member\\s*ID|Group\\s*Number)[\\s:]+([A-Z]{2,4}[-\\s]?\\d{4,6}[-\\s]?\\d{4,6})\\b/gi,\n      replacement: (match, label) => `${label}: <POLICY>`\n    },\n    {\n      regex: /\\b(Medical\\s*Record|MR|MRN|Patient\\s*ID)[\\s:]+([A-Z]{2,4}[-\\s]?\\d{4,6}[-\\s]?\\d{4,6})\\b/gi,\n      replacement: (match, label) => `${label}: <MEDICAL_ID>`\n    },\n    \n    // ===== SECTION 12: ORGANIZATIONAL IDs =====\n    {\n      regex: /\\b(Customer\\s*ID|Account\\s*ID|Client\\s*ID)[\\s:]+([A-Z]{4}-\\d{6})\\b/gi,\n      replacement: (match, label) => `${label}: <CUSTOMER_ID>`\n    },\n    {\n      regex: /\\b(Employee\\s*ID|Employee\\s*Number|Staff\\s*ID|Badge\\s*Number)[\\s:]+([A-Z]{3,4}[-\\s]?\\d{4}[-\\s]?\\d{3,4})\\b/gi,\n      replacement: (match, label) => `${label}: <EMPLOYEE_ID>`\n    },\n    {\n      regex: /\\b(Ticket|Ticket\\s*Number|Case|Case\\s*Number|Support\\s*ID)[\\s:]+#?([A-Z]{2}[-\\s]?\\d{4}[-\\s]?\\d{5})\\b/gi,\n      replacement: (match, label) => `${label}: <TICKET>`\n    },\n    \n    // ===== SECTION 13: MEETING & CONFERENCE =====\n    {\n      regex: /\\b(Meeting\\s*ID|Conference\\s*ID|Webinar\\s*ID|Session\\s*ID)[\\s:]+(\\d{3}\\s*\\d{3}\\s*\\d{4})\\b/gi,\n      replacement: (match, label) => `${label}: <MEETING_ID>`\n    },\n    {\n      regex: /https?:\\/\\/(?:zoom\\.us|teams\\.microsoft\\.com|webex\\.com|meet\\.google\\.com)[^\\s]+/gi,\n      replacement: '<MEETING_LINK>'\n    },\n    \n    // ===== SECTION 14: NETWORK & TECHNICAL =====\n    {\n      regex: /\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b/g,\n      replacement: '<IP>'\n    },\n    {\n      regex: /\\b(Port|Port\\s*Number)[\\s:]+(\\d{2,5})\\b/gi,\n      replacement: (match, label) => `${label}: <PORT>`\n    },\n    \n    // ===== SECTION 15: TRACKING & SHIPPING =====\n    {\n      regex: /\\b(Tracking|Tracking\\s*Number|Shipment)[\\s:]+([A-Z0-9]{10,25})\\b/gi,\n      replacement: (match, label, tracking) => {\n        if (/[A-Z]/.test(tracking) && /\\d/.test(tracking)) {\n          return `${label}: <TRACKING>`;\n        }\n        return match;\n      }\n    },\n    \n    // ===== SECTION 16: FILE & DATA =====\n    {\n      regex: /\\b(File\\s*Location|Path|SFTP|FTP)[\\s:]+([^\\s\\n]+\\.(csv|xlsx|txt|pdf|zip))\\b/gi,\n      replacement: (match, label) => `${label}: <FILE_PATH>`\n    },\n    {\n      regex: /\\b(Checksum|Hash|SHA-256|MD5)[\\s:]+([a-f0-9]{32,64})\\b/gi,\n      replacement: (match, label) => `${label}: <CHECKSUM>`\n    },\n    {\n      regex: /\\b(File\\s*Size|Size)[\\s:]+(\\d+\\.?\\d*\\s*(?:KB|MB|GB|TB))\\b/gi,\n      replacement: (match, label) => `${label}: <FILE_SIZE>`\n    },\n    \n    // ===== SECTION 17: BUSINESS DATA =====\n    {\n      regex: /\\b(Company|Company\\s*Name|Organization|Employer)[\\s:]+([A-Z][A-Za-z\\s&.-]{2,50}(?:Inc\\.|LLC|Ltd\\.|Corp\\.|Corporation|Limited|International)?)\\b/g,\n      replacement: (match, label) => `${label}: <COMPANY>`\n    },\n    {\n      regex: /\\b(Title|Job\\s*Title|Position)[\\s:]+([A-Z][A-Za-z\\s\\/&-]{3,50})\\b/g,\n      replacement: (match, label) => `${label}: <TITLE>`\n    },\n    {\n      regex: /\\b(VIP\\s*Status|Status|Membership\\s*Level|Tier|Level)[\\s:]+([A-Za-z]+)\\b/gi,\n      replacement: (match, label) => `${label}: <STATUS>`\n    },\n    {\n      regex: /\\b(NDA\\s*Signed|Contract\\s*Signed|Agreement\\s*Signed)[\\s:]+([^\\n]+)\\b/gi,\n      replacement: (match, label) => `${label}: <CONTRACT_INFO>`\n    },\n    {\n      regex: /\\b(Time\\s*Zone|Timezone)[\\s:]+([A-Z]{3,4})\\s*\\(UTC[+-]\\d{1,2}\\)/gi,\n      replacement: (match, label) => `${label}: <TIMEZONE>`\n    },\n    {\n      regex: /\\b(Records|Total\\s*Records|Customers)[\\s:]+(\\d{1,10})\\s*customers?\\b/gi,\n      replacement: (match, label) => `${label}: <RECORD_COUNT>`\n    },\n    \n    // ===== SECTION 18: NUMBERS (LAST - CATCH REMAINING) =====\n    {\n      regex: /\\b\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?\\b/g,\n      replacement: (match) => {\n        const num = match.replace(/,/g, '');\n        return num.length >= 4 ? '<NUMBER>' : match;\n      }\n    },\n    {\n      regex: /\\b\\d{3,}\\.?\\d{1,2}\\b(?!\\s*(?:GB|MB|KB|TB|Hz|px|pt|em|cm|mm|km|ft|in|yd))/g,\n      replacement: '<NUMBER>'\n    }\n  ];\n  \n  // Apply all patterns in order\n  patterns.forEach(({ regex, replacement }) => {\n    masked = masked.replace(regex, replacement);\n  });\n  \n  return masked;\n}\n\n// ============= PROCESS ALL EMAILS =============\nfunction processEmails() {\n  const items = $input.all();\n  \n  if (!items || items.length === 0) {\n    console.log('No emails to process');\n    return [];\n  }\n  \n  console.log(`\\n=== Processing ${items.length} emails ===\\n`);\n  \n  const results = items.map((item, index) => {\n    const email = item.json;\n    \n    // Validate email object\n    if (!email?.id || !email?.subject) {\n      console.log(`⚠️  Email ${index + 1}: Invalid email object, skipping`);\n      return null;\n    }\n    \n    // Extract sender information\n    const senderInfo = extractSenderInfo(email.from);\n    \n    // Get and mask email content\n    const bodyContent = email.data || email.bodyPreview || email.body?.content || '';\n    const maskedBody = maskAllPII(bodyContent);\n    const maskedSubject = maskAllPII(email.subject || '');\n    \n    // Create content for AI\n    const contentForAI = `Subject: ${maskedSubject}\nFrom: ${senderInfo.email}\nDomain: ${senderInfo.domain}\nBody: ${maskedBody}`;\n    \n    // Analyze PII\n    const piiAnalysis = analyzePII(maskedBody);\n    \n    console.log(`✅ Email ${index + 1}/${items.length}: \"${email.subject}\" - Found ${piiAnalysis.totalPII} PII items`);\n    \n    return {\n      json: {\n        emailId: email.id,\n        maskedSubject,\n        contentForAI,\n        senderDomain: senderInfo.domain,\n        hasAttachments: email.hasAttachments || false,\n        importance: email.importance || 'normal',\n        receivedDateTime: email.receivedDateTime,\n        \n        // PII Risk Assessment\n        piiDetected: piiAnalysis.totalPII > 0,\n        piiCount: piiAnalysis.totalPII,\n        piiTypes: piiAnalysis.types,\n        piiRiskLevel: calculateRiskLevel(piiAnalysis.totalPII),\n        \n      }\n    };\n  }).filter(item => item !== null);\n  \n  console.log(`\\n=== Processed ${results.length} emails successfully ===\\n`);\n  return results;\n}\n\n// ============= HELPER FUNCTIONS =============\nfunction extractSenderInfo(from) {\n  let email = '';\n  let domain = '';\n  \n  if (from) {\n    if (typeof from === 'string') {\n      email = from;\n      domain = from.split('@')[1] || '';\n    } else if (from.emailAddress) {\n      email = from.emailAddress.address || '';\n      domain = email.split('@')[1] || '';\n    }\n  }\n  \n  return { email, domain };\n}\n\nfunction analyzePII(maskedText) {\n  const piiPatterns = {\n    ssn: /<SSN>/g,\n    ein: /<EIN>/g,\n    aadhaar: /<AADHAAR>/g,\n    pan: /<PAN>/g,\n    niNumber: /<NI_NUMBER>/g,\n    govId: /<GOV_ID>/g,\n    passport: /<PASSPORT>/g,\n    license: /<LICENSE>/g,\n    dob: /<DOB>/g,\n    phone: /<PHONE>/g,\n    email: /<EMAIL>/g,\n    address: /<ADDRESS>/g,\n    name: /<NAME>/g,\n    account: /<ACCOUNT>/g,\n    iban: /<IBAN>/g,\n    sortCode: /<SORT_CODE>/g,\n    ifsc: /<IFSC>/g,\n    swift: /<SWIFT>/g,\n    routing: /<ROUTING>/g,\n    card: /<CARD>/g,\n    password: /<PASSWORD>/g,\n    username: /<USERNAME>/g,\n    apiKey: /<API_KEY>/g,\n    ip: /<IP>/g,\n    securityQuestion: /<SECURITY_QUESTION>/g,\n    securityAnswer: /<SECURITY_ANSWER>/g\n  };\n  \n  const types = {};\n  let totalPII = 0;\n  \n  Object.entries(piiPatterns).forEach(([key, pattern]) => {\n    const count = (maskedText.match(pattern) || []).length;\n    types[key] = count;\n    totalPII += count;\n  });\n  \n  return { types, totalPII };\n}\n\nfunction calculateRiskLevel(piiCount) {\n  if (piiCount === 0) return 'none';\n  if (piiCount <= 3) return 'low';\n  if (piiCount <= 7) return 'medium';\n  return 'high';\n}\n\n// ============= MAIN EXECUTION =============\nreturn processEmails();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4768,
+        -352
+      ],
+      "id": "457a2c9b-9e5b-45a2-96cf-b144f7dda328",
+      "name": "Prepare_Email_Data"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        5760,
+        -352
+      ],
+      "id": "964729e3-585e-409c-b3e8-12ed0366478d",
+      "name": "Aggregate1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cd313336-763d-4a25-add5-c00daf16db82",
+              "leftValue": "={{ $json.shouldCreateCategory }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6576,
+        -352
+      ],
+      "id": "e0759a07-1c1d-4124-9ef2-fb6b814a1566",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/me/outlook/masterCategories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6160,
+        -352
+      ],
+      "id": "8444cce9-fe63-45ba-84d7-d40d6f7fdf2b",
+      "name": "Check Categories1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if EMAIL_SUMMARY category exists\nconst categories = $json.value || [];\nconst emailSummaryExists = categories.some(cat => cat.displayName === 'EMAIL_SUMMARY');\n\n// Get the accessToken from Parse AI Output1\nconst accessToken = $('Parse AI Output1').first().json.accessToken;\n\nconst userEmail = $('Parse AI Output1').first().json.userEmail\n\nconsole.log(`Category exists: ${emailSummaryExists}`);\nconsole.log(`Should create: ${!emailSummaryExists}`);\n\nreturn [{\n  json: {\n    categoryExists: emailSummaryExists,\n    shouldCreateCategory: !emailSummaryExists,\n    accessToken: accessToken,   // ✅ Pass through for downstream nodes\n    userEmail: userEmail\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6368,
+        -352
+      ],
+      "id": "676b98d2-ebb5-4a9c-9bf7-0b56a0c0593c",
+      "name": "Check Category Exists1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/outlook/masterCategories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.accessToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"displayName\": \"EMAIL_SUMMARY\",\n  \"color\": \"preset19\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6768,
+        -752
+      ],
+      "id": "f636486e-79c9-4970-b8d5-a245e8922028",
+      "name": "Create Category1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============= FORMAT EMAIL SUMMARY WITH USER PREFERENCE =============\n\n// Get the single output from Parse AI Output1\nconst parseOutput = $('Parse AI Output1').first().json;\n\n// Extract the emails array and user info\nconst items = parseOutput.emails || [];\nconst userEmail = parseOutput.userEmail;\nconst summaryPreference = parseOutput.summaryPreference;\n\nif (items.length === 0) {\n  throw new Error('No email summaries found in Parse AI Output node');\n}\n\nconsole.log(`📧 Formatting summary for user: ${userEmail}`);\nconsole.log(`📊 Processing ${items.length} emails`);\nconsole.log(`🎨 Using format: ${summaryPreference.toUpperCase()}`);\n\n// ============= SHARED STYLES =============\nconst sharedStyles = `\n  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }\n  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; text-align: center; }\n  .header h1 { margin: 0; font-size: 28px; }\n  .header p { margin: 10px 0 0 0; opacity: 0.9; }\n  .email-card { background: white; border-left: 4px solid #667eea; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n  .email-card.urgent { border-left-color: #dc3545; }\n  .email-card.high { border-left-color: #fd7e14; }\n  .email-card.medium { border-left-color: #ffc107; }\n  .email-card.low { border-left-color: #28a745; }\n  .email-title { font-size: 18px; font-weight: 600; color: #2c3e50; margin: 0 0 10px 0; }\n  .email-meta { font-size: 13px; color: #6c757d; margin: 5px 0; }\n  .urgency-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-left: 10px; }\n  .urgency-urgent { background: #dc3545; color: white; }\n  .urgency-high { background: #fd7e14; color: white; }\n  .urgency-medium { background: #ffc107; color: #000; }\n  .urgency-low { background: #28a745; color: white; }\n  .summary ul { margin: 10px 0; padding-left: 20px; }\n  .summary li { margin: 5px 0; }\n  .action-items { background: #fff3cd; padding: 15px; border-radius: 6px; margin-top: 15px; border-left: 3px solid #ffc107; }\n  .action-items h4 { margin: 0 0 10px 0; color: #856404; font-size: 14px; }\n  .action-item { padding: 8px 12px; margin: 8px 0; background: white; border-radius: 4px; }\n  .action-item.high-priority { border-left: 3px solid #dc3545; }\n  .action-text { font-weight: 500; color: #333; }\n  .action-deadline { font-size: 12px; color: #6c757d; margin-top: 4px; }\n  .key-insight { background: #e7f3ff; padding: 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #0d6efd; }\n  .key-insight strong { color: #0d6efd; }\n  .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #dee2e6; color: #6c757d; font-size: 13px; }\n  .action-first-section { background: #fff8e1; border: 2px solid #ffc107; padding: 25px; border-radius: 10px; margin-bottom: 30px; }\n  .action-first-section h2 { color: #f57c00; margin-top: 0; }\n  .all-action-item { background: white; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 4px solid #ffc107; }\n  .all-action-item.high { border-left-color: #dc3545; }\n  .action-source { font-size: 12px; color: #999; margin-top: 5px; }\n`;\n\n// ============= CALCULATE STATISTICS =============\nconst sortedItems = items.sort((a, b) => {\n  const urgencyOrder = { 'URGENT': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3 };\n  return (urgencyOrder[a.urgency] || 99) - (urgencyOrder[b.urgency] || 99);\n});\n\nlet totalEmails = items.length;\nlet urgentCount = 0;\nlet highCount = 0;\nlet actionItemsCount = 0;\nlet requiresResponseCount = 0;\nlet allActionItems = [];\n\nsortedItems.forEach(email => {\n  const urgency = email.urgency || 'MEDIUM';\n  if (urgency === 'URGENT') urgentCount++;\n  if (urgency === 'HIGH') highCount++;\n  \n  const actionItems = email.actionItems || [];\n  actionItemsCount += actionItems.length;\n  \n  if (email.requiresResponse) requiresResponseCount++;\n  \n  // Collect all action items with source\n  actionItems.forEach(action => {\n    allActionItems.push({\n      ...action,\n      emailSubject: email.subject,\n      emailUrgency: urgency\n    });\n  });\n});\n\n// Sort all action items by priority\nallActionItems.sort((a, b) => {\n  const priorityOrder = { 'HIGH': 0, 'MEDIUM': 1, 'LOW': 2 };\n  return (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);\n});\n\n// ============= FORMAT BASED ON PREFERENCE =============\nlet htmlContent = '';\n\nif (summaryPreference === 'action_first') {\n  // ============= ACTION-FIRST FORMAT =============\n  htmlContent = `\n<!DOCTYPE html>\n<html>\n<head><style>${sharedStyles}</style></head>\n<body>\n  <div class=\"header\">\n    <h1>📋 Daily Email Summary - Action-First</h1>\n    <p>Generated on ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>\n  </div>\n  `;\n  \n  // ACTION ITEMS SECTION (if any exist)\n  if (allActionItems.length > 0) {\n    htmlContent += `\n  <div class=\"action-first-section\">\n    <h2>🎯 Action Items (${allActionItems.length})</h2>\n    <p style=\"color: #666; margin-bottom: 20px;\">Here are all the actions you need to take, organized by priority:</p>\n    `;\n    \n    allActionItems.forEach(action => {\n      const priorityClass = action.priority === 'HIGH' ? 'high' : '';\n      htmlContent += `\n    <div class=\"all-action-item ${priorityClass}\">\n      <div class=\"action-text\">${action.action}</div>\n      <div class=\"action-deadline\">\n        ⏰ <strong>Deadline:</strong> ${action.deadline} | \n        <strong>Priority:</strong> ${action.priority}\n      </div>\n      <div class=\"action-source\">📧 From: ${action.emailSubject}</div>\n    </div>\n      `;\n    });\n    \n    htmlContent += `\n  </div>\n    `;\n  }\n  \n  // ALL EMAILS SECTION\n  htmlContent += `\n  <h2 style=\"color: #495057; margin: 30px 0 20px 0;\">📧 All Emails (${totalEmails})</h2>\n  `;\n  \n  sortedItems.forEach(email => {\n    const urgency = email.urgency || 'MEDIUM';\n    const urgencyIndicator = email.urgencyIndicator || '⚪';\n    const subject = email.subject || 'No Subject';\n    const from = email.from || 'Unknown';\n    const domain = email.domain || 'Unknown';\n    const emailType = email.emailType || 'Unknown';\n    const estimatedReadTime = email.estimatedReadTime || 'Unknown';\n    const summary = email.summary || [];\n    const keyInsight = email.keyInsight || '';\n    const requiresResponse = email.requiresResponse || false;\n    \n    const urgencyClass = urgency.toLowerCase();\n    const urgencyBadgeClass = `urgency-${urgencyClass}`;\n    \n    htmlContent += `\n  <div class=\"email-card ${urgencyClass}\">\n    <h3 class=\"email-title\">${urgencyIndicator} ${subject}<span class=\"urgency-badge ${urgencyBadgeClass}\">${urgency}</span></h3>\n    <div class=\"email-meta\">\n      <strong>From:</strong> ${from} (${domain}) | \n      <strong>Type:</strong> ${emailType} | \n      <strong>Read Time:</strong> ${estimatedReadTime}\n    </div>\n    \n    <div class=\"summary\">\n      <strong>Summary:</strong>\n      <ul>\n        ${summary.map(point => `<li>${point}</li>`).join('')}\n      </ul>\n    </div>\n    \n    ${keyInsight ? `\n    <div class=\"key-insight\">\n      <strong>💡 Key Insight:</strong> ${keyInsight}\n    </div>\n    ` : ''}\n    \n    ${requiresResponse ? '<div style=\"margin-top: 10px; color: #856404;\">✉️ <strong>Response Required</strong></div>' : ''}\n  </div>\n    `;\n  });\n  \n} else {\n  // ============= STANDARD FORMAT =============\n  htmlContent = `\n<!DOCTYPE html>\n<html>\n<head><style>${sharedStyles}</style></head>\n<body>\n  <div class=\"header\">\n    <h1>📧 Daily Email Summary - Standard</h1>\n    <p>Generated on ${new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>\n  </div>\n  `;\n  \n  sortedItems.forEach(email => {\n    const urgency = email.urgency || 'MEDIUM';\n    const urgencyIndicator = email.urgencyIndicator || '⚪';\n    const subject = email.subject || 'No Subject';\n    const from = email.from || 'Unknown';\n    const domain = email.domain || 'Unknown';\n    const emailType = email.emailType || 'Unknown';\n    const estimatedReadTime = email.estimatedReadTime || 'Unknown';\n    const summary = email.summary || [];\n    const actionItems = email.actionItems || [];\n    const keyInsight = email.keyInsight || '';\n    const requiresResponse = email.requiresResponse || false;\n    const metrics = email.metrics || {};\n    \n    const urgencyClass = urgency.toLowerCase();\n    const urgencyBadgeClass = `urgency-${urgencyClass}`;\n    \n    htmlContent += `\n  <div class=\"email-card ${urgencyClass}\">\n    <h3 class=\"email-title\">${urgencyIndicator} ${subject}<span class=\"urgency-badge ${urgencyBadgeClass}\">${urgency}</span></h3>\n    <div class=\"email-meta\">\n      <strong>From:</strong> ${from} (${domain}) | \n      <strong>Type:</strong> ${emailType} | \n      <strong>Read Time:</strong> ${estimatedReadTime}\n    </div>\n    \n    <div class=\"summary\">\n      <strong>Summary:</strong>\n      <ul>\n        ${summary.map(point => `<li>${point}</li>`).join('')}\n      </ul>\n    </div>\n    \n    ${keyInsight ? `\n    <div class=\"key-insight\">\n      <strong>💡 Key Insight:</strong> ${keyInsight}\n    </div>\n    ` : ''}\n    \n    ${actionItems.length > 0 ? `\n    <div class=\"action-items\">\n      <h4>📋 Action Items (${actionItems.length}):</h4>\n      ${actionItems.map(action => `\n        <div class=\"action-item ${action.priority === 'HIGH' ? 'high-priority' : ''}\">\n          <div class=\"action-text\">${action.action}</div>\n          <div class=\"action-deadline\">\n            ⏰ Deadline: ${action.deadline} | Priority: ${action.priority}\n          </div>\n        </div>\n      `).join('')}\n    </div>\n    ` : ''}\n    \n    ${requiresResponse ? '<div style=\"margin-top: 10px; color: #856404;\">✉️ <strong>Response Required</strong></div>' : ''}\n  </div>\n    `;\n  });\n}\n\n// ============= FOOTER (SAME FOR BOTH FORMATS) =============\nhtmlContent += `\n  <div class=\"footer\">\n    <h3>📊 Summary Statistics</h3>\n    <p>\n      <strong>Total Emails:</strong> ${totalEmails} | \n      <strong>Urgent:</strong> ${urgentCount} | \n      <strong>High Priority:</strong> ${highCount} | \n      <strong>Action Items:</strong> ${actionItemsCount} | \n      <strong>Require Response:</strong> ${requiresResponseCount}\n    </p>\n    <p style=\"margin-top: 15px;\">Format: <strong>${summaryPreference === 'action_first' ? 'Action-First' : 'Standard'}</strong></p>\n    <p>This summary was automatically generated by your email processing workflow.</p>\n  </div>\n</body>\n</html>\n`;\n\nconsole.log(`✅ Successfully formatted ${totalEmails} emails using ${summaryPreference.toUpperCase()} format`);\n\nreturn [{\n  json: {\n    htmlContent: htmlContent,\n    totalEmails: totalEmails,\n    urgentCount: urgentCount,\n    highCount: highCount,\n    actionItemsCount: actionItemsCount,\n    requiresResponseCount: requiresResponseCount,\n    summaryPreference: summaryPreference,\n    userEmail: userEmail\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7056,
+        -752
+      ],
+      "id": "cd4c6a51-f329-49c8-9fda-a82d6cfc1417",
+      "name": "Format Email Summary1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\n// Determine format name for subject\nconst formatName = data.summaryPreference === 'action_first' ? 'Action-First' : 'Standard';\n\nconst emailPayload = {\n  subject: `📧 Daily Email Summary (${formatName}) - ${data.totalEmails} Emails (${data.urgentCount} Urgent, ${data.actionItemsCount} Actions)`,\n  body: {\n    contentType: \"HTML\",\n    content: data.htmlContent\n  },\n  toRecipients: [\n    {\n      emailAddress: {\n        address: $('If1').first().json.userEmail\n      }\n    }\n  ],\n  categories: [\"EMAIL_SUMMARY\"]\n};\n\nreturn [{\n  json: emailPayload\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7280,
+        -752
+      ],
+      "id": "a56b6251-f940-4208-8d07-627b5b968b77",
+      "name": "Prepare Email JSON1"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        9088,
+        256
+      ],
+      "id": "3d66638d-c93f-41b2-bef0-be0c4def5fda",
+      "name": "Wait for Send2",
+      "webhookId": "cf7b76e8-349a-4c50-86b9-ee349d53b615"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check_Token_Expiry node (fixed)\n\n// In n8n Code node, always return items (array)\nconst item = $input.first().json;\n\n// tokenExpiresAtUnix might be seconds (10 digits) or ms (13 digits)\n// Your value is 13 digits -> already milliseconds\nlet expiresAtMs = Number(item.tokenExpiresAtUnix);\n\nif (!Number.isFinite(expiresAtMs)) {\n  // fallback to ISO string if Unix is missing/bad\n  expiresAtMs = Date.parse(item.tokenExpiresAt);\n}\n\n// If it's seconds, convert to ms\nif (expiresAtMs < 1e12) {\n  expiresAtMs = expiresAtMs * 1000;\n}\n\nconst nowMs = Date.now();\nconst timeUntilExpirySec = Math.floor((expiresAtMs - nowMs) / 1000);\n\n// treat expired tokens as \"needs refresh\" too\nconst needsRefresh = timeUntilExpirySec <= 300; // <5 min OR already expired\n\nreturn [\n  {\n    json: {\n      ...item,\n      needsRefresh,\n      timeUntilExpiry: timeUntilExpirySec,\n      tokenExpiresAtMs: expiresAtMs,\n      nowMs,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -384
+      ],
+      "id": "e19e19b2-1f9f-439b-9438-b010f6c8e758",
+      "name": "Check_Token_Expiry1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $vars.Inbox_Assistant_Microsoft_Tenant_Id }}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Id }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Secret }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.refreshToken }}"
+            },
+            {
+              "name": "scope",
+              "value": "openid profile email User.Read Calendars.ReadWrite offline_access"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1920,
+        -592
+      ],
+      "id": "a8a9497f-bb78-45f3-a23d-db8a622cfaec",
+      "name": "Refresh_Token_Microsoft1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate_New_Expiry node\nconst refreshData = $input.first().json;\nconst checkData = $('Check_Token_Expiry1').first().json;\n\nconst access_token = refreshData.access_token;\nconst refresh_token = refreshData.refresh_token || checkData.refresh_token;\nconst expires_in = refreshData.expires_in || 3600; // Microsoft returns this in SECONDS\n\n// Store in SECONDS (not milliseconds)\nconst current_time = Math.floor(Date.now() / 1000); // SECONDS\nconst expires_at_unix = current_time + expires_in; // SECONDS\nconst expires_at_iso = new Date(expires_at_unix * 1000).toISOString(); // Convert to ms for ISO\n\nconsole.log(`✅ Token refreshed for ${checkData.user_email}`);\nconsole.log(`   New expiry: ${expires_at_unix} (${expires_at_iso})`);\n\nreturn {\n  user_id: checkData.user_id,\n  user_email: checkData.user_email,\n  user_name: checkData.user_name,\n  outlook_credential_id: checkData.outlook_credential_id,\n  timezone: checkData.timezone,\n  webhook_url: checkData.webhook_url,\n  is_active: checkData.is_active,\n  access_token: access_token,\n  refresh_token: refresh_token,\n  token_expires_at: expires_at_iso,\n  token_expires_at_unix: expires_at_unix, // Store as SECONDS\n  last_refreshed: new Date().toISOString(),\n  subscription_id: checkData.subscription_id,\n  subscription_expires_at: checkData.subscription_expires_at,\n  id: checkData.id,\n  createdAt: checkData.createdAt,\n  updatedAt: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2128,
+        -592
+      ],
+      "id": "723c4691-c0ce-4d70-a321-13f669858dc8",
+      "name": "Calculate_New_Expiry1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $('Set_User_Context1').item.json.userId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "access_token": "={{ $json.access_token }}",
+            "refresh_token": "={{ $json.refresh_token }}",
+            "token_expires_at": "={{ $json.token_expires_at }}",
+            "token_expires_at_unix": "={{ $json.token_expires_at_unix }}",
+            "last_refreshed": "={{ $json.last_refreshed }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "outlook_credential_id",
+              "displayName": "outlook_credential_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        2336,
+        -592
+      ],
+      "id": "d5562f5f-449d-402d-a40f-03a5b5e21c1b",
+      "name": "Update row(s)1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a917bc8f-44df-4af0-a2bf-518a5c8929a4",
+              "leftValue": "={{ $json.needsRefresh }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1632,
+        -384
+      ],
+      "id": "2b5e7a80-5098-4000-a4e6-522922f48c46",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a11985d0-f848-49da-9e6b-5138eb817719",
+              "leftValue": "={{ $json.noEmailsFound }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3568,
+        -368
+      ],
+      "id": "bd0c188b-55a1-45e7-9afa-1d916aa132d2",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge_Email_Response_With_UserData\nconst emailResponse = $json;\nconst userData = $('Start_and_End_Window1').item.json;\n\nconst allEmails = emailResponse.value || [];\n\nconsole.log(`Retrieved ${allEmails.length} emails for ${userData.user_email}`);\nconsole.log(`User preference: ${userData.summaryPreference}`);\n\n// Determine if no emails found\nconst noEmailsFound = allEmails.length === 0;\n\nif (noEmailsFound) {\n  console.log(`ℹ️  No emails to process for ${userData.user_email}`); \n}\n\nreturn [{\n  json: {\n    ...emailResponse,      // Includes @odata.context and value array\n    userData: {\n      userId: userData.userId,\n      user_email: userData.user_email,\n      userName: userData.userName,\n      timezone: userData.timezone,\n      access_token: userData.access_token,\n      refreshToken: userData.refreshToken,\n      tokenExpiresAt: userData.tokenExpiresAt,\n      tokenExpiresAtUnix: userData.tokenExpiresAtUnix,\n      subscriptionId: userData.subscriptionId,\n      subscriptionExpiresAt: userData.subscriptionExpiresAt,\n      summaryPreference: userData.summaryPreference || 'standard'\n    },\n    noEmailsFound: noEmailsFound,\n    totalFetched: allEmails.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -368
+      ],
+      "id": "0115f062-63e4-4097-b1e9-a138af9bfe5c",
+      "name": "Merge_Email_Response_With_UserData"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get user info from Merge_Email_Response_With_UserData\nconst userData = $json.userData;\nconst userEmail = userData.user_email;\nconst userTimezone = userData.timezone\n\n// Format date in user's timezone\nconst userTime = new Date().toLocaleString('en-US', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric', \n  hour: '2-digit', \n  minute: '2-digit',\n  timeZone: userTimezone,\n  timeZoneName: 'short'\n});\n\nconst htmlContent = `\n<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { \n      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; \n      line-height: 1.6; \n      color: #333; \n      max-width: 600px; \n      margin: 0 auto; \n      padding: 20px; \n      background-color: #ffffff;\n    }\n    .header { \n      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); \n      color: white; \n      padding: 30px; \n      border-radius: 10px; \n      margin-bottom: 30px; \n      text-align: center;\n    }\n    .header h1 { \n      margin: 0; \n      font-size: 28px; \n      color: #495057;\n    }\n    .header p { \n      margin: 10px 0 0 0; \n      opacity: 0.95; \n      font-size: 14px;\n      color: #495057;\n    }\n    .content { \n      background: #ffffff; \n      border: 2px solid #e9ecef;\n      padding: 40px 30px; \n      border-radius: 8px; \n      text-align: center;\n      box-shadow: 0 2px 8px rgba(0,0,0,0.08);\n    }\n    .icon { \n      font-size: 72px; \n      margin-bottom: 20px; \n      line-height: 1;\n    }\n    .message { \n      font-size: 20px; \n      color: #2c3e50; \n      margin-bottom: 15px;\n      font-weight: 600;\n    }\n    .submessage { \n      font-size: 15px; \n      color: #495057; \n      line-height: 1.8;\n      margin: 15px 0;\n    }\n    .badge {\n      display: inline-block;\n      background: #28a745;\n      color: white;\n      padding: 10px 20px;\n      border-radius: 25px;\n      font-size: 14px;\n      font-weight: 600;\n      margin-top: 25px;\n      box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);\n    }\n    .footer { \n      text-align: center; \n      margin-top: 30px; \n      padding-top: 20px; \n      border-top: 2px solid #e9ecef; \n      color: #6c757d; \n      font-size: 13px; \n    }\n  </style>\n</head>\n<body>\n  <div class=\"header\">\n    <h1>✅ You're All Caught Up!</h1>\n    <p>Generated on ${userTime}</p>\n  </div>\n  \n  <div class=\"content\">\n    <div class=\"icon\">📬</div>\n    <div class=\"message\">No New Emails to Summarize</div>\n    <div class=\"submessage\">\n      Your inbox is up to date! There are <strong>no unread emails</strong> from the last 24 hours that require attention.\n      <br><br>\n      Enjoy your organized inbox and have a productive day!\n    </div>\n    <div class=\"badge\">✨ Inbox Zero Status</div>\n  </div>\n  \n  <div class=\"footer\">\n    <p>This notification was automatically generated by your email processing workflow.</p>\n  </div>\n</body>\n</html>\n`;\n\nconsole.log(`✅ No emails found for ${userEmail} (timezone: ${userTimezone}) - sending confirmation`);\n\nreturn [{\n  json: {\n    htmlContent: htmlContent,\n    userEmail: userEmail,\n    accessToken: userData.access_token\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3984,
+        -1168
+      ],
+      "id": "e920882e-16a8-4ce8-9781-0b9503b06019",
+      "name": "Format_No_Emails_Message"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst emailPayload = {\n  subject: \"✅ Daily Email Summary - You're All Caught Up! (0 Emails)\",\n  body: {\n    contentType: \"HTML\",\n    content: data.htmlContent\n  },\n  toRecipients: [\n    {\n      emailAddress: {\n        address: data.userEmail\n      }\n    }\n  ],\n  categories: [\"EMAIL_SUMMARY\"]\n};\n\nreturn [{\n  json: emailPayload\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        -1168
+      ],
+      "id": "7909d210-7473-471e-b4fa-7b640c514baf",
+      "name": "Prepare_No_Emails_JSON"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4800,
+        -928
+      ],
+      "id": "9318f3e7-c257-419f-a62f-087f32cca15c",
+      "name": "Wait for Send3",
+      "webhookId": "cf7b76e8-349a-4c50-86b9-ee349d53b615"
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $json.toRecipients[0].emailAddress.address }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.body.content }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        7488,
+        -752
+      ],
+      "id": "e1732b9e-8f9c-407c-a3b1-4cac6868498a",
+      "name": "Send a message2",
+      "webhookId": "385ecd8c-2eb7-45fb-9359-05998dec7d82",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "TCago4kvX8SfIICA",
+          "name": "GIPR Integration Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $json.toRecipients[0].emailAddress.address }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.body.content }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -1168
+      ],
+      "id": "3ac5d727-0d09-4333-983b-195e72f2a181",
+      "name": "Send a message3",
+      "webhookId": "385ecd8c-2eb7-45fb-9359-05998dec7d82",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "TCago4kvX8SfIICA",
+          "name": "GIPR Integration Email"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAzureOpenAi",
+      "typeVersion": 1,
+      "position": [
+        5680,
+        -32
+      ],
+      "id": "75adbbff-d20e-4fb3-b3f1-47ab63c863f1",
+      "name": "Azure OpenAI Chat Model"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Split Out2": {
+      "main": [
+        [
+          {
+            "node": "Markdown1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Users1": {
+      "main": [
+        [
+          {
+            "node": "Filter_Active_Users1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Set_User_Context1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger4": {
+      "main": [
+        [
+          {
+            "node": "Get_Users1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start_and_End_Window1": {
+      "main": [
+        [
+          {
+            "node": "Fetch_User_Emails1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter_Active_Users1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_User_Context1": {
+      "main": [
+        [
+          {
+            "node": "Check_Token_Expiry1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch_User_Emails1": {
+      "main": [
+        [
+          {
+            "node": "Merge_Email_Response_With_UserData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrails1": {
+      "main": [
+        [
+          {
+            "node": "Format_for_AI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_for_AI1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output1": {
+      "main": [
+        [
+          {
+            "node": "Check Categories1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Email_Data": {
+      "main": [
+        [
+          {
+            "node": "Guardrails1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate1": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Create Category1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Email Summary1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Categories1": {
+      "main": [
+        [
+          {
+            "node": "Check Category Exists1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Category Exists1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Category1": {
+      "main": [
+        [
+          {
+            "node": "Format Email Summary1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Summary1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email JSON1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email JSON1": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Send2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Markdown1": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Email_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Token_Expiry1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh_Token_Microsoft1": {
+      "main": [
+        [
+          {
+            "node": "Calculate_New_Expiry1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate_New_Expiry1": {
+      "main": [
+        [
+          {
+            "node": "Update row(s)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Refresh_Token_Microsoft1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start_and_End_Window1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row(s)1": {
+      "main": [
+        [
+          {
+            "node": "Start_and_End_Window1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Format_No_Emails_Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Out2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_Email_Response_With_UserData": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_No_Emails_Message": {
+      "main": [
+        [
+          {
+            "node": "Prepare_No_Emails_JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_No_Emails_JSON": {
+      "main": [
+        [
+          {
+            "node": "Send a message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Send3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        [
+          {
+            "node": "Wait for Send2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message3": {
+      "main": [
+        [
+          {
+            "node": "Wait for Send3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "abbf0302-9038-4c5d-8f94-79aa77ee779f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "zdKMGnD1xeeUNRqr",
+  "tags": []
+}

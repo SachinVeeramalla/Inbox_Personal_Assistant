@@ -1,0 +1,331 @@
+{
+  "name": "Save User Preferences",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_email",
+              "keyValue": "={{ $json.userEmail }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "summary_preference": "={{ $json.summaryPreference }}",
+            "preferences_set_at": "={{ $json.preferencesSetAt }}",
+            "renewal_failure_count": 0
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        288
+      ],
+      "id": "331a945d-bcfb-43c1-84bb-e2829b214159",
+      "name": "Update_Database"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>Success - Account Connected</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    body {\n      font-family: 'Segoe UI', sans-serif;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      margin: 0;\n      padding: 20px;\n    }\n    .container {\n      background: white;\n      padding: 50px 40px;\n      border-radius: 20px;\n      box-shadow: 0 20px 60px rgba(0,0,0,0.3);\n      text-align: center;\n      max-width: 480px;\n      animation: fadeIn 0.5s ease-out;\n    }\n    @keyframes fadeIn {\n      from {\n        opacity: 0;\n        transform: translateY(20px);\n      }\n      to {\n        opacity: 1;\n        transform: translateY(0);\n      }\n    }\n    h1 { \n      color: #2C5F5F; \n      margin-bottom: 15px;\n      font-size: 28px;\n    }\n    .email { \n      font-weight: 600; \n      color: #F39C12; \n    }\n    .features {\n      background: linear-gradient(135deg, #e8f4f8 0%, #f0f9fc 100%);\n      padding: 20px;\n      border-radius: 12px;\n      margin: 20px 0;\n      text-align: left;\n      border-left: 4px solid #F39C12;\n    }\n    .features strong {\n      color: #2C5F5F;\n      display: block;\n      margin-bottom: 10px;\n    }\n    .features ul {\n      list-style: none;\n      padding: 0;\n      margin: 0;\n    }\n    .features li {\n      padding: 8px 0;\n      color: #555;\n      position: relative;\n      padding-left: 25px;\n    }\n    .features li:before {\n      content: \"✓\";\n      color: #F39C12;\n      font-weight: bold;\n      position: absolute;\n      left: 0;\n      font-size: 18px;\n    }\n    .preference-badge {\n      background: #F39C12;\n      color: white;\n      padding: 8px 16px;\n      border-radius: 20px;\n      display: inline-block;\n      margin: 10px 0;\n      font-weight: 600;\n    }\n    .btn {\n      display: inline-block;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      color: white;\n      padding: 14px 40px;\n      text-decoration: none;\n      border-radius: 12px;\n      font-size: 16px;\n      font-weight: 600;\n      margin-top: 20px;\n      transition: all 0.3s;\n      box-shadow: 0 5px 20px rgba(44, 95, 95, 0.3);\n    }\n    .btn:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 8px 25px rgba(44, 95, 95, 0.4);\n    }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div style=\"font-size:72px; margin-bottom: 20px;\">✅</div>\n    <h1>Account Successfully Connected!</h1>\n    <p style=\"font-size: 18px; margin: 10px 0;\">Welcome <strong>{{ $('Validate_and_Parse1').item.json.userName || 'to Groovie' }}</strong>!</p>\n    <p style=\"color: #666;\">Your Outlook account <span class=\"email\">{{ $('Validate_and_Parse1').item.json.userEmail }}</span> is now connected.</p>\n    \n    <div class=\"preference-badge\">\n      📧 {{ $('Validate_and_Parse1').item.json.summaryPreference === 'action_first' ? 'Action-First Summary' : 'Standard Summary' }}\n    </div>\n    \n    <div class=\"features\">\n      <strong>What's active now:</strong>\n      <ul>\n        <li>Real-time email categorization</li>\n        <li>AI-powered daily summaries</li>\n        <li>Automatic email organization</li>\n        <li>Smart scheduling features</li>\n      </ul>\n    </div>\n    \n    <p style=\"font-size: 14px; color: #999; margin-top: 30px;\">\n      You'll receive your first summary tomorrow morning at 6 AM\n    </p>\n    \n    \n    <p style=\"font-size: 12px; color: #999; margin-top: 30px;\">\n      © 2025 Groves & Company. All rights reserved.\n    </p>\n  </div>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1168,
+        288
+      ],
+      "id": "4c1d9ec7-0062-47d6-8ce3-1abbbbdaab21",
+      "name": "Respond_Success"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "save-preferences",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        544,
+        288
+      ],
+      "id": "453b3ada-8594-419f-bacc-1284ff4ed4d3",
+      "name": "Webhook1",
+      "webhookId": "46d3a7cd-db13-4348-a1c0-31e43065a145"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconsole.log('Received preference data:', JSON.stringify(body, null, 2));\n\nif (!body.userId) {\n  throw new Error('Missing userId');\n}\nif (!body.userEmail) {\n  throw new Error('Missing userEmail');\n}\nif (!body.summaryPreference) {\n  throw new Error('Missing summaryPreference');\n}\n\nconst allowedPreferences = ['action_first', 'standard'];\nif (!allowedPreferences.includes(body.summaryPreference)) {\n  throw new Error(`Invalid summary preference: ${body.summaryPreference}`);\n}\n\nconsole.log(`✅ Valid preference data for ${body.userEmail}: ${body.summaryPreference}`);\n\nreturn [{\n  json: {\n    userId: body.userId,\n    userEmail: body.userEmail,\n    userName: body.userName || '',\n    summaryPreference: body.summaryPreference,\n    preferencesSetAt: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        288
+      ],
+      "id": "764334a9-0911-4d19-a052-a9776e2a5f0a",
+      "name": "Validate_and_Parse1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Update_Database": {
+      "main": [
+        [
+          {
+            "node": "Respond_Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Validate_and_Parse1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate_and_Parse1": {
+      "main": [
+        [
+          {
+            "node": "Update_Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "6d5a3c3b-7c27-4805-be7b-817880c70ed8",
+  "meta": {
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "_Gs3-zT-wwMP1PhgWLcW2",
+  "tags": []
+}

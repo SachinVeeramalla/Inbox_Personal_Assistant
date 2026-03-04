@@ -1,0 +1,1677 @@
+{
+  "name": "Outlook Onboarding with Categories & Subscription",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const firstItem = $input.all()[0].json;\nconst stateEncoded = firstItem.query.state;\n\n// Check if state is actually provided\nif (!stateEncoded || stateEncoded === 'undefined' || stateEncoded === 'null') {\n    throw new Error('No valid state parameter found. State value: ' + stateEncoded);\n}\n\n// Decode state\ntry {\n    // Try base64url decoding (URL-safe base64)\n    const stateJson = Buffer.from(stateEncoded, 'base64url').toString('utf-8');\n    const stateData = JSON.parse(stateJson);\n    \n    const sessionId = stateData.sessionId || '';\n    const csrfToken = stateData.csrf || '';\n    const timestamp = stateData.timestamp || '';\n    \n    if (!sessionId) {\n        throw new Error('No sessionId found in decoded state');\n    }\n    \n    console.log(`✅ SessionId extracted: ${sessionId}`);\n    \n    // Return modified item\n    return [{\n        json: {\n            ...firstItem,\n            sessionId: sessionId,\n            csrfToken: csrfToken,\n            stateTimestamp: timestamp\n        }\n    }];\n    \n} catch (error) {\n    // If base64url fails, try regular base64\n    try {\n        const stateJson = Buffer.from(stateEncoded, 'base64').toString('utf-8');\n        const stateData = JSON.parse(stateJson);\n        \n        const sessionId = stateData.sessionId || '';\n        const csrfToken = stateData.csrf || '';\n        const timestamp = stateData.timestamp || '';\n        \n        if (!sessionId) {\n            throw new Error('No sessionId found in decoded state');\n        }\n        \n        console.log(`✅ SessionId extracted: ${sessionId}`);\n        \n        return [{\n            json: {\n                ...firstItem,\n                sessionId: sessionId,\n                csrfToken: csrfToken,\n                stateTimestamp: timestamp\n            }\n        }];\n        \n    } catch (innerError) {\n        throw new Error(`Failed to decode state. Original value: \"${stateEncoded}\". Error: ${error.message}`);\n    }\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1488,
+        2960
+      ],
+      "id": "2792aaf3-c9fe-44f4-be74-47182e5e01a4",
+      "name": "Decode_State"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/me/mailboxSettings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        2624
+      ],
+      "id": "ae694aa8-3f02-409c-85f2-33fa8bf6e7ca",
+      "name": "Get_Mailbox_Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mailboxSettings = $input.first().json;\nconst tokenData = $('Request_Tokens1').first().json;\nconst windowsTz = mailboxSettings.timeZone || 'Eastern Standard Time';\n\nconst windowsToIana = {\n  \"Eastern Standard Time\": \"America/New_York\",\n  \"Pacific Standard Time\": \"America/Los_Angeles\",\n  \"Central Standard Time\": \"America/Chicago\",\n  \"Mountain Standard Time\": \"America/Denver\"\n};\n\nconst ianaTz = windowsToIana[windowsTz] || 'America/New_York';\nconsole.log(`✅ User timezone: ${windowsTz} → ${ianaTz}`);\n\nreturn {\n  json: {\n    ...tokenData,\n    timezone: ianaTz,\n    windowsTimezone: windowsTz,\n    language: mailboxSettings.language?.locale || 'en-US'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        2624
+      ],
+      "id": "0a563754-7041-42a9-bc4e-b8d3372ae391",
+      "name": "Convert_Timezone"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -432,
+        2944
+      ],
+      "id": "55bb8e8b-ae9f-440b-85e4-08fbc9d314bb",
+      "name": "Merge_Tokens_And_Session"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $json.userId }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        2944
+      ],
+      "id": "7345bb33-c6a9-4f95-bf90-1733136b005a",
+      "name": "Check_If_User_Exists",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.user_id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        176,
+        2944
+      ],
+      "id": "a5541d76-6e3d-40f0-87d0-f3baf70f95a1",
+      "name": "If_User_Exists"
+    },
+    {
+      "parameters": {
+        "jsCode": "const userData = $('Mapping_Content1').first().json;\nconst webhookUrl = $vars.Email_Categorization_Webhook_URL || '';\n\nreturn [{\n  json: {\n    user_id: userData.userId,  // ✅ CHANGED: Use Microsoft's userId instead of timestamp\n    user_email: userData.employeeEmail,\n    user_name: userData.employeeName,\n    access_token: userData.accessToken,\n    refresh_token: userData.refreshToken,\n    token_expires_at: userData.expiresAt,\n    token_expires_at_unix: userData.expiresAtUnix,\n    last_refreshed: userData.lastRefreshed,\n    timezone: userData.timezone,\n    webhook_url: webhookUrl,\n    is_active: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        3040
+      ],
+      "id": "3e7d4eb4-2eb8-4497-8ed2-b74b12e344f4",
+      "name": "Prepare_New_User"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $json.user_email }}/outlook/masterCategories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Mapping_Content1').first().json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        2944
+      ],
+      "id": "6e0a3d89-4e83-4c64-98f1-d4d6adde488f",
+      "name": "Get_Master_Categories"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: \"Check_Categories_And_Extract_Email\"\n\nconst data = $input.first().json;\n\n// Extract email from @odata.context\n// Format: \"https://graph.microsoft.com/v1.0/$metadata#users('email%40domain.com')/outlook/masterCategories\"\nconst odataContext = data['@odata.context'] || '';\nlet userEmail = '';\n\n// Extract email using regex\nconst emailMatch = odataContext.match(/users\\('([^']+)'\\)/);\nif (emailMatch && emailMatch[1]) {\n  // Decode URL-encoded email (%40 → @)\n  userEmail = decodeURIComponent(emailMatch[1]);\n  console.log(`✅ Extracted email: ${userEmail}`);\n} else {\n  console.warn(`⚠️ Could not extract email from: ${odataContext}`);\n}\n\n// Check which categories need to be created\nconst requiredCategories = [\n  { displayName: 'URGENT', color: 'preset0' },\n  { displayName: 'TO_REPLY', color: 'preset2' },\n  { displayName: 'ACTION_REQUIRED', color: 'preset4' },\n  { displayName: 'MEETING_SUMMARY', color: 'preset8' },\n  { displayName: 'JAGGAER', color: 'preset9' },\n  { displayName: 'FYI', color: 'preset5' },\n  { displayName: 'PROMOTIONAL', color: 'preset13' }\n];\n\nconst existingCategories = data.value || [];\nconst existingSet = new Set(existingCategories.map(cat => cat.displayName.toUpperCase().trim()));\n\nconst categoriesToCreate = requiredCategories.filter(\n  cat => !existingSet.has(cat.displayName.toUpperCase().trim())\n);\n\nconsole.log(`📊 Categories check for ${userEmail}:`);  // ✅ Fixed\nconsole.log(`   Existing: ${existingCategories.length}`);  // ✅ Fixed\nconsole.log(`   Required: ${requiredCategories.length}`);  // ✅ Fixed\nconsole.log(`   To create: ${categoriesToCreate.length}`);  // ✅ Fixed\n\nreturn [{\n  json: {\n    userEmail: userEmail,  // ✅ Added email\n    needsCreation: categoriesToCreate.length > 0,\n    categoriesToCreate: categoriesToCreate,\n    existingCategoriesCount: existingCategories.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        2944
+      ],
+      "id": "3f3c83b1-9f61-497a-966c-a44b8e42b1dd",
+      "name": "Check_Categories"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.needsCreation }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        2944
+      ],
+      "id": "e88b02fa-bf32-4459-8a6b-5559ad1caacb",
+      "name": "Need_Categories?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const categoriesToCreate = $input.first().json.categoriesToCreate;\nreturn categoriesToCreate.map(category => ({ json: category }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        2416
+      ],
+      "id": "289ead81-3523-4584-9609-e89da242ddf3",
+      "name": "Prepare_Categories"
+    },
+    {
+      "parameters": {
+        "batchSize": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1632,
+        2416
+      ],
+      "id": "ef3fa43c-903a-4bc9-ba47-5880713485bb",
+      "name": "Loop_Categories"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/users/{{ $('Mapping_Content1').first().json.employeeEmail }} /outlook/masterCategories",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Mapping_Content1').first().json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        2768
+      ],
+      "id": "f77424d3-26b9-411b-a250-885b0130be2d",
+      "name": "Create_Category",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2176,
+        2768
+      ],
+      "id": "f966fa66-a7e5-49e0-8620-ef87818fe949",
+      "name": "Wait_300ms",
+      "webhookId": "category-creation-wait"
+    },
+    {
+      "parameters": {
+        "path": "outlook-onboard",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1712,
+        2960
+      ],
+      "id": "55a1316a-9139-4950-8bb5-ca6020871c32",
+      "name": "Webhook1",
+      "webhookId": "83fff4c1-002b-4f21-87ad-c7926e43bcdf"
+    },
+    {
+      "parameters": {
+        "jsCode": "const code = $input.item.json.query.code;\nconst sessionId = $input.item.json.sessionId;\nconst csrfToken = $input.item.json.csrfToken;\n\nif (!code) {\n  throw new Error('No authorization code received');\n}\n\nreturn {\n  json: {\n    code: code,\n    sessionId: sessionId,\n    csrfToken: csrfToken\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1280,
+        2960
+      ],
+      "id": "d3e4d49f-8f65-4065-a8e6-bd5d62f5ac1d",
+      "name": "Returns_Authorization_Code1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $vars.Inbox_Assistant_Microsoft_Tenant_Id}}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Id }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $vars.Inbox_Assistant_Microsoft_Client_Secret }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "authorization_code"
+            },
+            {
+              "name": "code",
+              "value": "={{ $json.code }}"
+            },
+            {
+              "name": "redirect_uri",
+              "value": "={{ $vars.Inbox_Assistant_Prod_Redirect_URI }}"
+            },
+            {
+              "name": "scope",
+              "value": "openid profile email User.Read MailboxSettings.Read Calendars.ReadWrite Mail.ReadWrite offline_access"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1072,
+        2624
+      ],
+      "id": "031ebb85-3041-43fa-948f-f847530b1017",
+      "name": "Request_Tokens1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const tokenData = $input.first().json;\n\n// Extract tokens\nconst accessToken = tokenData.access_token || '';\nconst refreshToken = tokenData.refresh_token || '';\nconst idToken = tokenData.id_token || '';\nconst tokenType = tokenData.token_type || 'Bearer';\nconst expiresIn = tokenData.expires_in || 3600;\nconst scope = tokenData.scope || '';\nconst sessionId = tokenData.sessionId || '';\nconst timezone = tokenData.timezone || '';\n\nif (!accessToken || !idToken) {\n    throw new Error('Missing required tokens');\n}\n\nconsole.log(`✅ Received fresh tokens from Microsoft (expires_in: ${expiresIn}s)`);\n\n// Decode JWT to get user info\ntry {\n    // Split JWT and get payload (middle part)\n    const jwtParts = idToken.split('.');\n    if (jwtParts.length !== 3) {\n        throw new Error('Invalid JWT format');\n    }\n    \n    const payloadEncoded = jwtParts[1];\n    const payloadDecoded = Buffer.from(payloadEncoded, 'base64url').toString('utf-8');\n    const payload = JSON.parse(payloadDecoded);\n    \n    // Extract user information\n    const employeeName = payload.name || '';\n    const employeeEmail = payload.email || payload.preferred_username || payload.upn || '';\n    const userId = payload.oid || payload.sub || '';\n    \n    if (!userId) {\n        throw new Error('No userId found in JWT');\n    }\n    \n    console.log(`✅ User authenticated: ${employeeName} (${employeeEmail})`);\n    \n    // Calculate token expiration\n    const currentTime = Math.floor(Date.now() / 1000);\n    const expiresAtUnix = currentTime + expiresIn;\n    const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();\n    const lastRefreshedIso = new Date(currentTime * 1000).toISOString();\n    \n    console.log(`✅ Token expiry: ${expiresAtIso}`);\n    \n    // Return structured data\n    return [{\n        json: {\n            sessionId: sessionId,\n            userId: userId,\n            employeeEmail: employeeEmail,\n            employeeName: employeeName,\n            accessToken: accessToken,\n            refreshToken: refreshToken,\n            timezone: timezone,\n            tokenType: tokenType,\n            scope: scope,\n            expiresIn: expiresIn,\n            expiresAt: expiresAtIso,\n            expiresAtUnix: expiresAtUnix,\n            lastRefreshed: lastRefreshedIso,\n            authProvider: 'microsoft'\n        }\n    }];\n    \n} catch (error) {\n    throw new Error(`Failed to decode JWT: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        2944
+      ],
+      "id": "e6093d7c-dcec-4c62-afb2-0f2a9a6c5fec",
+      "name": "Mapping_Content1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $('Mapping_Content1').first().json.userId }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "access_token": "={{ $('Mapping_Content1').first().json.accessToken }}",
+            "refresh_token": "={{ $('Mapping_Content1').first().json.refreshToken }}",
+            "token_expires_at": "={{ $('Mapping_Content1').first().json.expiresAt }}",
+            "last_refreshed": "={{ $('Mapping_Content1').first().json.lastRefreshed }}",
+            "timezone": "={{ $('Mapping_Content1').first().json.timezone }}",
+            "token_expires_at_unix": "={{ $('Mapping_Content1').first().json.expiresAtUnix }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        464,
+        2800
+      ],
+      "id": "229c9928-f409-445e-b9b2-96c41e13e2c1",
+      "name": "UPDATE_Existing_User1"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/subscriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Mapping_Content1').first().json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2976,
+        2960
+      ],
+      "id": "a215ea9b-1e71-4785-91f2-0b3fbe577314",
+      "name": "Get_Subscriptions"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3712,
+        2096
+      ],
+      "id": "b487854d-f9c9-44fd-9e24-195078b35395",
+      "name": "Loop_Over_Items1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3118c4a3-1143-4197-b004-e2840495f5f9",
+              "leftValue": "={{ $json._noSubscriptions }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3488,
+        2960
+      ],
+      "id": "9aac80b4-6817-47dd-83d6-9cefd9663801",
+      "name": "Has_Subscriptions_To_Delete1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: \"Filter_User_Subscriptions\"\n\nconst webhookUrl = $vars.Email_Categorization_Webhook_URL;\nconst allSubs = $input.first().json.value || [];\n\n// ✅ Get user email from Check_Categories node\nconst userEmail = $('Check_Categories').first().json.userEmail;\n\nif (!userEmail) {\n  throw new Error('No user email found from Check_Categories node');\n}\n\n// ✅ FIXED: Get user_id from Mapping_Content1 (the source of truth)\nconst userId = $('Mapping_Content1').first().json.userId;\n\nif (!userId) {\n  throw new Error('No userId found from Mapping_Content1 node');\n}\n\nconsole.log(`📊 Total subscriptions in account: ${allSubs.length}`);\nconsole.log(`👤 Looking for subscriptions for user: ${userEmail} (ID: ${userId})`);\n\n// Filter: Our webhook + this user\nconst userSubs = allSubs.filter(sub => {\n  const matchesWebhook = sub.notificationUrl === webhookUrl;\n  const matchesUser = sub.resource && sub.resource.toLowerCase().includes(userEmail.toLowerCase());\n  return matchesWebhook && matchesUser;\n});\n\nconsole.log(`🎯 Found ${userSubs.length} subscription(s) for ${userEmail}`);\n\nif (userSubs.length === 0) {\n  console.log(`✅ No existing subscriptions - will create new one`);\n  return [{ \n    json: { \n      _noSubscriptions: true, \n      user_email: userEmail,\n      user_id: userId,  // ✅ Now using Microsoft's stable userId\n      access_token: $('Mapping_Content1').first().json.accessToken \n    } \n  }];  \n}\n\nconsole.log(`🗑️  Will delete ${userSubs.length} subscription(s):`);\nuserSubs.forEach((sub, index) => {\n  console.log(`   ${index + 1}. ID: ${sub.id}`);\n  console.log(`      Expires: ${sub.expirationDateTime}`);\n});\n\n// Return each subscription as a separate item for the loop\nreturn userSubs.map(sub => ({\n  json: {\n    _noSubscriptions: false, \n    subscription_id: sub.id,\n    subscription_resource: sub.resource,\n    subscription_expires: sub.expirationDateTime,\n    user_email: userEmail,\n    user_id: userId,  // ✅ Now using Microsoft's stable userId\n    access_token: $('Mapping_Content1').first().json.accessToken\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3248,
+        2960
+      ],
+      "id": "ecf02869-8831-4c2d-a4a3-e5efa31e1adb",
+      "name": "Filter_User_Subscriptions",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://graph.microsoft.com/v1.0/subscriptions/{{ $json.subscription_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Mapping_Content1').first().json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4096,
+        2480
+      ],
+      "id": "54215604-a633-46f0-ade0-983d82fb66f8",
+      "name": "Delete_Subscription"
+    },
+    {
+      "parameters": {
+        "amount": 0.5
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4304,
+        2480
+      ],
+      "id": "48a82c7b-1e2b-4b9b-b4ad-39f17821545a",
+      "name": "Wait",
+      "webhookId": "fc7e5e9f-d107-47bf-b911-09b1e2e1989f"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "session-id",
+              "name": "sessionId",
+              "value": "={{ $('Mapping_Content1').first().json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "user-email",
+              "name": "userEmail",
+              "value": "={{ $json.user_email }}",
+              "type": "string"
+            },
+            {
+              "id": "user-name",
+              "name": "userName",
+              "value": "={{ $json.user_name }}",
+              "type": "string"
+            },
+            {
+              "id": "8998fe89-a51e-4c5f-8127-29ebd8418b8b",
+              "name": "userId",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5664,
+        2976
+      ],
+      "id": "ad1c14a8-f82d-4edd-9809-c2f097c1c1b4",
+      "name": "Prepare_Redirect_Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/subscriptions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Mapping_Content1').first().json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"changeType\": \"created\",\n  \"notificationUrl\": \"{{ $vars.Email_Categorization_Webhook_URL }}\",\n  \"resource\": \"users/{{ $json.user_email }}/messages\",\n  \"expirationDateTime\": \"{{ $now.plus(3, 'days').toISO() }}\",\n  \"clientState\": \"{{ $json.user_id }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5152,
+        2976
+      ],
+      "id": "189db78d-c429-41fd-9cff-08d7138441c7",
+      "name": "Create_Graph_Subscription1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "keyValue": "={{ $('Filter_User_Subscriptions').first().json.user_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "subscription_id": "={{ $json.id }}",
+            "subscription_expires_at": "={{ $json.expirationDateTime }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        5408,
+        2976
+      ],
+      "id": "8aa92c38-2b4e-40a5-b494-d149ee735b5a",
+      "name": "Store_Subscription_ID1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        6704,
+        5264
+      ],
+      "id": "5ca269ce-684e-4214-a823-962b2306b31b",
+      "name": "Limit1"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "pWYV0ILQScFX2xKN",
+          "mode": "list",
+          "cachedResultName": "Inbox_Personal_Assistant_User_Credentials",
+          "cachedResultUrl": "/projects/1wvyPEEDrvIyF7vc/datatables/pWYV0ILQScFX2xKN"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_id": "={{ $json.user_id }}",
+            "user_email": "={{ $json.user_email }}",
+            "user_name": "={{ $json.user_name }}",
+            "timezone": "={{ $json.timezone }}",
+            "webhook_url": "={{ $json.webhook_url }}",
+            "access_token": "={{ $json.access_token }}",
+            "refresh_token": "={{ $json.refresh_token }}",
+            "token_expires_at": "={{ $json.token_expires_at }}",
+            "last_refreshed": "={{ $json.last_refreshed }}",
+            "is_active": "={{ $json.is_active }}",
+            "token_expires_at_unix": "={{ $json.token_expires_at_unix }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_email",
+              "displayName": "user_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "user_name",
+              "displayName": "user_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "webhook_url",
+              "displayName": "webhook_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "is_active",
+              "displayName": "is_active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "access_token",
+              "displayName": "access_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "refresh_token",
+              "displayName": "refresh_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at",
+              "displayName": "token_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token_expires_at_unix",
+              "displayName": "token_expires_at_unix",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_refreshed",
+              "displayName": "last_refreshed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "subscription_id",
+              "displayName": "subscription_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "subscription_expires_at",
+              "displayName": "subscription_expires_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_subscription_renewal",
+              "displayName": "last_subscription_renewal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "renewal_failure_count",
+              "displayName": "renewal_failure_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_reason",
+              "displayName": "last_failure_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_failure_timestamp",
+              "displayName": "last_failure_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "summary_preference",
+              "displayName": "summary_preference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "preferences_set_at",
+              "displayName": "preferences_set_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        576,
+        3040
+      ],
+      "id": "3f278ead-539b-4f14-9cc0-4075ff9c9387",
+      "name": "INSERT_New_User1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: Prepare_Subscription_Data\n// This runs AFTER all subscriptions are deleted\n\n// Get the original data from Filter_User_Subscriptions\nconst originalData = $('Filter_User_Subscriptions').first().json;\n\nconsole.log('✅ All subscriptions deleted, preparing to create new one');\nconsole.log(`   User: ${originalData.user_email}`);\nconsole.log(`   User ID: ${originalData.user_id}`);\n\nreturn [{\n  json: {\n    user_email: originalData.user_email,\n    user_id: originalData.user_id,\n    access_token: originalData.access_token,\n    _noSubscriptions: true  // Mark as ready for creation\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4064,
+        2080
+      ],
+      "id": "a0f9a215-d114-4efd-afda-5c696f6edc7b",
+      "name": "Prepare_After_Delete"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html>\n<html>\n<head>\n  <title>Redirecting...</title>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <style>\n    body {\n      font-family: 'Segoe UI', sans-serif;\n      display: flex;\n      justify-content: center;\n      align-items: center;\n      min-height: 100vh;\n      background: linear-gradient(135deg, #2C5F5F 0%, #1a4444 100%);\n      margin: 0;\n    }\n    .loading {\n      text-align: center;\n      color: white;\n    }\n    .loading h2 {\n      margin-bottom: 20px;\n    }\n    .spinner {\n      border: 4px solid rgba(255,255,255,0.3);\n      border-top: 4px solid #F39C12;\n      border-radius: 50%;\n      width: 50px;\n      height: 50px;\n      animation: spin 1s linear infinite;\n      margin: 0 auto;\n    }\n    @keyframes spin {\n      0% { transform: rotate(0deg); }\n      100% { transform: rotate(360deg); }\n    }\n  </style>\n</head>\n<body>\n  <div class=\"loading\">\n    <div class=\"spinner\"></div>\n    <h2>Setting up your account...</h2>\n  </div>\n  \n  <script>\n    const userData = {\n      userId: '{{ $json.sessionId }}',\n      userEmail: '{{ $json.userEmail }}',\n      userName: '{{ $json.userName }}',\n      userId : '{{ $json.userId }}',\n    };\n    \n    const baseUrl = window.location.origin;\n    const preferenceUrl = `${baseUrl}/webhook/preference?userId=${encodeURIComponent(userData.userId)}&userEmail=${encodeURIComponent(userData.userEmail)}&userName=${encodeURIComponent(userData.userName)}`;\n    \n    console.log('Redirecting to:', preferenceUrl);\n    \n    // Immediate redirect\n    window.location.href = preferenceUrl;\n  </script>\n</body>\n</html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        5920,
+        2976
+      ],
+      "id": "5266cfa8-b9ae-40d5-b2fd-ab2f46de44a2",
+      "name": "Redirect_to_Preference"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Decode_State": {
+      "main": [
+        [
+          {
+            "node": "Returns_Authorization_Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Mailbox_Settings": {
+      "main": [
+        [
+          {
+            "node": "Convert_Timezone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert_Timezone": {
+      "main": [
+        [
+          {
+            "node": "Merge_Tokens_And_Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_Tokens_And_Session": {
+      "main": [
+        [
+          {
+            "node": "Mapping_Content1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_If_User_Exists": {
+      "main": [
+        [
+          {
+            "node": "If_User_Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If_User_Exists": {
+      "main": [
+        [
+          {
+            "node": "UPDATE_Existing_User1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare_New_User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_New_User": {
+      "main": [
+        [
+          {
+            "node": "INSERT_New_User1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Master_Categories": {
+      "main": [
+        [
+          {
+            "node": "Check_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check_Categories": {
+      "main": [
+        [
+          {
+            "node": "Need_Categories?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need_Categories?": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Categories": {
+      "main": [
+        [
+          {
+            "node": "Loop_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop_Categories": {
+      "main": [
+        [
+          {
+            "node": "Get_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create_Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create_Category": {
+      "main": [
+        [
+          {
+            "node": "Wait_300ms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait_300ms": {
+      "main": [
+        [
+          {
+            "node": "Loop_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Decode_State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Returns_Authorization_Code1": {
+      "main": [
+        [
+          {
+            "node": "Request_Tokens1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge_Tokens_And_Session",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Request_Tokens1": {
+      "main": [
+        [
+          {
+            "node": "Get_Mailbox_Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapping_Content1": {
+      "main": [
+        [
+          {
+            "node": "Check_If_User_Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UPDATE_Existing_User1": {
+      "main": [
+        [
+          {
+            "node": "Get_Master_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Subscriptions": {
+      "main": [
+        [
+          {
+            "node": "Filter_User_Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop_Over_Items1": {
+      "main": [
+        [
+          {
+            "node": "Prepare_After_Delete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete_Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has_Subscriptions_To_Delete1": {
+      "main": [
+        [
+          {
+            "node": "Loop_Over_Items1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create_Graph_Subscription1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter_User_Subscriptions": {
+      "main": [
+        [
+          {
+            "node": "Has_Subscriptions_To_Delete1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete_Subscription": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop_Over_Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Redirect_Data": {
+      "main": [
+        [
+          {
+            "node": "Redirect_to_Preference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create_Graph_Subscription1": {
+      "main": [
+        [
+          {
+            "node": "Store_Subscription_ID1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store_Subscription_ID1": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Redirect_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit1": {
+      "main": [
+        []
+      ]
+    },
+    "INSERT_New_User1": {
+      "main": [
+        [
+          {
+            "node": "Get_Master_Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_After_Delete": {
+      "main": [
+        [
+          {
+            "node": "Create_Graph_Subscription1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "10bc1661-3c34-4873-b4f2-46100f3fa0b2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d9ec11e49c00b52cb9e60c07d200a5ec80e852e8cfc4111e3085c68a7c796886"
+  },
+  "id": "xy0xRpo71BRrRhMK",
+  "tags": []
+}
